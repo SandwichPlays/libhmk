@@ -95,7 +95,8 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
 }
 
 void matrix_scan(void) {
-  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+  // Only scan keys that are connected to analog inputs
+  for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS; i++) {
     const uint16_t new_adc_filtered =
         EMA(matrix_analog_read(i), key_matrix[i].adc_filtered);
     const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
@@ -174,4 +175,10 @@ void matrix_scan(void) {
 
 void matrix_disable_rapid_trigger(uint8_t key, bool disable) {
   bitmap_set(rapid_trigger_disabled, key, disable);
+}
+
+void matrix_trigger_virtual_key(uint8_t key, bool is_pressed) {
+  if (key < NUM_KEYS) {
+    key_matrix[key].is_pressed = is_pressed;
+  }
 }

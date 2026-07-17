@@ -25,6 +25,7 @@
 #include "tusb.h"
 #include "wear_leveling.h"
 #include "xinput.h"
+#include "encoder.h"
 
 int main(void) {
   // Initialize the hardware
@@ -46,6 +47,9 @@ int main(void) {
   xinput_init();
   layout_init();
   command_init();
+#if defined(ENCODER_ENABLE)
+  encoder_init();
+#endif
 
   tud_init(BOARD_TUD_RHPORT);
 
@@ -56,6 +60,9 @@ int main(void) {
     matrix_scan();
     layout_task();
     xinput_task();
+#if defined(ENCODER_ENABLE)
+    encoder_task();
+#endif
   }
 
   return 0;

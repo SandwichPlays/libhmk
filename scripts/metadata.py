@@ -60,6 +60,8 @@ def keyboard_metadata_def():
         "numKeys": kb_json.keyboard.num_keys,
         "numAdvancedKeys": kb_json.keyboard.num_advanced_keys,
         "layout": kb_json.layout.model_dump(exclude_none=True),
+        "encoders": kb_json.layout.encoders
+                    and [e.model_dump(exclude_none=True) for e in kb_json.layout.encoders],
         "defaultKeymaps": utils.resolve_default_keymaps(kb_json),
     }
 

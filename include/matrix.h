@@ -114,9 +114,16 @@ void matrix_scan(void);
  * This function is used by the advanced keys that override the Rapid Trigger
  * settings e.g. Dynamic Keystroke.
  *
- * @param key Key index
- * @param disable Whether to disable Rapid Trigger
- *
  * @return None
  */
 void matrix_disable_rapid_trigger(uint8_t key, bool disable);
+
+/**
+ * @brief Trigger a virtual key
+ *
+ * @param key Key index
+ * @param is_pressed Whether the key is pressed
+ *
+ * @return None
+ */
+void matrix_trigger_virtual_key(uint8_t key, bool is_pressed);

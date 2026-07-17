@@ -148,5 +148,48 @@ if kb_json.actuation is not None:
     if actuation.actuation_point is not None:
         build_flags.define("ACTUATION_POINT", actuation.actuation_point)
 
+# Encoder Configuration
+if kb_json.encoders is not None:
+    encoders = kb_json.encoders
+
+    build_flags.define("ENCODER_ENABLE")
+    build_flags.define("ENCODER_COUNT", len(encoders))
+
+    encoder_timers = []
+    encoder_ports = []
+    encoder_pin_nums = []
+    encoder_keys = []
+    encoder_resolutions = []
+    encoder_button_ports = []
+    encoder_button_pins = []
+    encoder_button_keys = []
+
+    for encoder in encoders:
+        encoder_timers.append(encoder.timer)
+        ports, pin_nums = driver.metadata.adc.to_gpio_array(encoder.pins)
+        encoder_ports.append(ports)
+        encoder_pin_nums.append(pin_nums)
+        encoder_keys.append(encoder.keys)
+        encoder_resolutions.append(encoder.resolution)
+
+        if encoder.button_pin is not None:
+            port, pin_num = driver.metadata.adc.to_gpio(encoder.button_pin)
+            encoder_button_ports.append(port)
+            encoder_button_pins.append(pin_num)
+            encoder_button_keys.append(encoder.button_key)
+        else:
+            encoder_button_ports.append("NULL")
+            encoder_button_pins.append(0)
+            encoder_button_keys.append(255)
+
+    build_flags.define("ENCODER_TIMERS", utils.to_c_array(encoder_timers))
+    build_flags.define("ENCODER_PORTS", utils.to_c_array(encoder_ports))
+    build_flags.define("ENCODER_PINS", utils.to_c_array(encoder_pin_nums))
+    build_flags.define("ENCODER_KEYS", utils.to_c_array(encoder_keys))
+    build_flags.define("ENCODER_RESOLUTIONS", utils.to_c_array(encoder_resolutions))
+    build_flags.define("ENCODER_BUTTON_PORTS", utils.to_c_array(encoder_button_ports))
+    build_flags.define("ENCODER_BUTTON_PINS", utils.to_c_array(encoder_button_pins))
+    build_flags.define("ENCODER_BUTTON_KEYS", utils.to_c_array(encoder_button_keys))
+
 # Add source build flags
 env.Append(BUILD_FLAGS=build_flags.get_flags())

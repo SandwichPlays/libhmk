@@ -1,0 +1,126 @@
+{
+  "name": "Sando4",
+  "manufacturer": "Sando",
+  "maintainer": "Sando",
+  "usb": {
+    "vid": "0x5A4E",
+    "pid": "0x0004",
+    "port": "hs"
+  },
+  "keyboard": {
+    "num_profiles": 4,
+    "num_layers": 4,
+    "num_keys": 7,
+    "num_advanced_keys": 8
+  },
+  "hardware": {
+    "hse_value": 12000000,
+    "driver": "at32f405xx"
+  },
+  "analog": {
+    "raw": {
+      "input": [
+        "A4",
+        "A6",
+        "C5",
+        "B1"
+      ],
+      "vector": [
+        4,
+        3,
+        2,
+        1
+      ]
+    }
+  },
+  "calibration": {
+    "initial_rest_value": 2400,
+    "initial_bottom_out_threshold": 700
+  },
+  "encoders": [
+    {
+      "pins": [
+        "C6",
+        "C7"
+      ],
+      "keys": [
+        4,
+        5
+      ],
+      "timer": "TMR3",
+      "resolution": 4,
+      "button_pin": "B10",
+      "button_key": 6
+    }
+  ],
+  "layout": {
+    "keymap": [
+      [
+        {
+          "key": 0,
+          "y": 1.5
+        },
+        {
+          "key": 1
+        },
+        {
+          "key": 2
+        },
+        {
+          "key": 3
+        }
+      ]
+    ],
+    "encoders": [
+      {
+        "keys": [
+          4,
+          5
+        ],
+        "buttonKey": 6,
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 1
+      }
+    ]
+  },
+  "keymap": [
+    [
+      "KC_Z",
+      "KC_X",
+      "KC_C",
+      "KC_V",
+      "KC_VOLD",
+      "KC_VOLU",
+      "KC_MUTE"
+    ],
+    [
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______"
+    ],
+    [
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______"
+    ],
+    [
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______",
+      "_______"
+    ]
+  ]
+}

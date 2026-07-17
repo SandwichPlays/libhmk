@@ -58,9 +58,25 @@ class KeyboardAnalogMux(BaseModel):
     # Array of GPIO pin names for the multiplexer select lines
     select: list[str]
     # Array of ADC input channels for the multiplexers. If a string is provided, it is used as the GPIO pin name
-    input: list[NonNegativeInt | str]
+    input: list[list[NonNegativeInt | str]]
     # Mapping from multiplexers to ADC input channels
     matrix: list[list[NonNegativeInt]]
+
+
+# Rotary Encoder configuration
+class KeyboardEncoder(BaseModel):
+    # Array of GPIO pin names for the encoder pins
+    pins: list[str] = Field(min_length=2, max_length=2)
+    # The two virtual keys for CCW and CW
+    keys: list[NonNegativeInt] = Field(min_length=2, max_length=2)
+    # The hardware timer to use for the encoder
+    timer: str
+    # The number of steps per detent
+    resolution: PositiveInt = 4
+    # The GPIO pin for the encoder button
+    button_pin: str | None = None
+    # The virtual key for the encoder button
+    button_key: NonNegativeInt | None = None
 
 
 # Analog Configuration
@@ -91,6 +107,17 @@ class KeyboardWearLeveling(BaseModel):
     write_log_size: int = Field(ge=1, le=65536)
 
 
+# Keyboard Layout Encoder
+class KeyboardLayoutEncoder(BaseModel):
+    # The two virtual keys for CCW and CW
+    keys: list[NonNegativeInt] = Field(min_length=2, max_length=2)
+    buttonKey: NonNegativeInt | None = None
+    x: float
+    y: float
+    w: PositiveFloat | None = None
+    h: PositiveFloat | None = None
+
+
 class KeyboardLayoutKey(BaseModel):
     key: NonNegativeInt
     w: PositiveFloat | None = None
@@ -107,6 +134,7 @@ class KeyboardLayout(BaseModel):
     labels: list[str | list[str]] | None = None
     # Metadata for how the keyboard should be rendered in the web configurator
     keymap: list[list[KeyboardLayoutKey]]
+    encoders: list[KeyboardLayoutEncoder] | None = None
 
 
 # Actuation Configuration
@@ -126,6 +154,7 @@ class Keyboard(BaseModel):
     analog: KeyboardAnalog
     calibration: KeyboardCalibration
     wear_leveling: KeyboardWearLeveling | None = None
+    encoders: list[KeyboardEncoder] | None = None
     layout: KeyboardLayout
     # Default keymap
     keymap: list[list[str]] | None = None

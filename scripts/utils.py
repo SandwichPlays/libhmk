@@ -60,6 +60,8 @@ def get_driver(keyboard: str):
             return STM32F446XX
         case "at32f405xx":
             return AT32F405XX
+        case "stm32g431xx":
+            return STM32G431XX
         case _:
             raise ValueError(f"Unsupported driver: {driver}")
 

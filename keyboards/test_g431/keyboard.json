@@ -1,0 +1,66 @@
+{
+  "name": "TestG431",
+  "manufacturer": "Test",
+  "maintainer": "Test",
+  "usb": {
+    "vid": "0x5A4E",
+    "pid": "0x0004",
+    "port": "fs"
+  },
+  "keyboard": {
+    "num_profiles": 1,
+    "num_layers": 1,
+    "num_keys": 4,
+    "num_advanced_keys": 4
+  },
+  "hardware": {
+    "hse_value": 16000000,
+    "driver": "stm32g431xx"
+  },
+  "analog": {
+    "raw": {
+      "input": [
+        "A4",
+        "A5",
+        "A6",
+        "A7"
+      ],
+      "vector": [
+        0,
+        1,
+        2,
+        3
+      ]
+    }
+  },
+  "calibration": {
+    "initial_rest_value": 2400,
+    "initial_bottom_out_threshold": 700
+  },
+  "layout": {
+    "keymap": [
+      [
+        {
+          "key": 0
+        },
+        {
+          "key": 1
+        },
+        {
+          "key": 2
+        },
+        {
+          "key": 3
+        }
+      ]
+    ]
+  },
+  "keymap": [
+    [
+      "KC_Z",
+      "KC_X",
+      "KC_C",
+      "KC_V"
+    ]
+  ]
+}

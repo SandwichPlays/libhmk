@@ -120,6 +120,11 @@ class ADC:
                     channels.append(x)
         return channels
 
+    # Convert a single GPIO pin name to a tuple of (GPIO port name, GPIO pin number)
+    def to_gpio(self, pin: str):
+        ports, pin_nums = self.to_gpio_array([pin])
+        return ports[0], pin_nums[0]
+
 
 @dataclass
 class Metadata:
@@ -238,3 +243,55 @@ AT32F405XX = Driver(
         ),
     ),
 )
+
+STM32G431XX = Driver(
+    platformio=PlatformIO(
+        board="genericSTM32G431CB",
+        ldscript="stm32g431cbtx.ld",
+        framework="stm32cube",
+        platform="ststm32",
+    ),
+    tinyusb=TinyUSB(mcu="stm32g4"),
+    metadata=Metadata(
+        bootloader=Bootloader(
+            address=0x1FFF0000,
+            magic=0xDEADBEEF,
+        ),
+        flash=Flash(
+            sector_sizes=UniformSectors(
+                size=2048,
+                num_sectors=64,
+            ),
+            empty_value=0xFFFFFFFF,
+        ),
+        adc=ADC(
+            max_resolution=12,
+            input_pins=[
+                "A0",
+                "A1",
+                "A2",
+                "A3",
+                "A4",
+                "A5",
+                "A6",
+                "A7",
+                "B0",
+                "B1",
+                "B2",
+                "B11",
+                "B12",
+                "B14",
+                "C13",
+                "C14",
+                "C15",
+                "F0",
+                "F1",
+            ],
+            to_gpio_array=lambda pins: (
+                [f"GPIO{pin[0]}" for pin in pins],
+                [f"GPIO_PIN_{pin[1:]}" for pin in pins],
+            ),
+        ),
+    ),
+)
+
