@@ -91,12 +91,13 @@ class KeyboardAnalog(BaseModel):
     mux: KeyboardAnalogMux | None = None
 
 
-# Calibration Configuration
 class KeyboardCalibration(BaseModel):
     # See `include/lib/eeconfig.h`
     initial_rest_value: NonNegativeInt
     # See `include/lib/eeconfig.h`
     initial_bottom_out_threshold: NonNegativeInt
+    # Total switch travel distance in millimeters
+    switch_travel: float = 4.0
 
 
 # Wear leveling Configuration

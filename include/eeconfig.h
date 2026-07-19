@@ -40,6 +40,8 @@ typedef struct __attribute__((packed)) {
   // actual bottom-out threshold, the distance calculation may be inaccurate
   // until the first bottom-out event.
   uint16_t initial_bottom_out_threshold;
+  // Per-key switch travel distance in tenths of a millimeter
+  uint8_t switch_travel[NUM_KEYS];
 } eeconfig_calibration_t;
 
 // Keyboard options configuration
@@ -73,7 +75,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0104
+#define EECONFIG_VERSION 0x0105
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be

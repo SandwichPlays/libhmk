@@ -35,13 +35,14 @@
   },
   "calibration": {
     "initial_rest_value": 2400,
-    "initial_bottom_out_threshold": 700
+    "initial_bottom_out_threshold": 700,
+    "switch_travel": 3.6
   },
   "encoders": [
     {
       "pins": [
-        "C6",
-        "C7"
+        "C7",
+        "C6"
       ],
       "keys": [
         4,

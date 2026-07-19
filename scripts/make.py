@@ -111,8 +111,11 @@ if kb_json.analog.mux is not None:
     )
 
 # Calibration Configuration
+cal_dict = kb_json.calibration.model_dump()
+travel_val = int(cal_dict.pop("switch_travel") * 10)
+cal_dict["switch_travel"] = [travel_val] * kb_json.keyboard.num_keys
 build_flags.define(
-    "DEFAULT_CALIBRATION", utils.to_c_struct(kb_json.calibration.model_dump())
+    "DEFAULT_CALIBRATION", utils.to_c_struct(cal_dict)
 )
 
 # Wear leveling configuration

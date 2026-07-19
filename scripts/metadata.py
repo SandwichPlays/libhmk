@@ -55,6 +55,7 @@ def keyboard_metadata_def():
         "productId": kb_json.usb.pid,
         "usbHighSpeed": kb_json.usb.port == KeyboardUSBPort.HIGH_SPEED,
         "adcResolution": utils.get_adc_resolution(kb_json, driver),
+        "switchTravel": kb_json.calibration.switch_travel,
         "numProfiles": kb_json.keyboard.num_profiles,
         "numLayers": kb_json.keyboard.num_layers,
         "numKeys": kb_json.keyboard.num_keys,

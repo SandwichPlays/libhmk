@@ -73,7 +73,11 @@ def to_c_array(arr: list | bytes):
 
 # Convert a Python dictionary to a C struct initializer
 def to_c_struct(value: dict):
-    return f"{{{', '.join(f'.{k} = {v}' for k, v in value.items())}}}"
+    def to_c_val(x):
+        if isinstance(x, list):
+            return to_c_array(x)
+        return str(x)
+    return f"{{{', '.join(f'.{k} = {to_c_val(v)}' for k, v in value.items())}}}"
 
 
 # Convert a Pyhon list to a C array slice definition
