@@ -28,15 +28,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "-i", type=int, default=1024, description="Number of entries in the LUT"
     )
+    parser.add_argument(
+        "-m", type=int, default=10000, description="Maximum scale value of the LUT"
+    )
     parser = parser.parse_args()
 
     a: Decimal = parser.a
     i: int = parser.i
+    m: int = parser.m
 
     lut = []
     for x in range(i):
-        numer = Decimal(255) * (Decimal(1) + a * Decimal(x)).log10()
-        denom = (Decimal(1) + a * Decimal(i)).log10()
+        numer = Decimal(m) * (Decimal(1) + a * Decimal(x)).log10()
+        denom = (Decimal(1) + a * Decimal(i - 1)).log10()
         lut.append(round(numer / denom))
 
-    print(f"{{{", ".join(str(x) for x in lut)}}}")
+    items = ", ".join(str(x) for x in lut)
+    print(f"{{{items}}}")

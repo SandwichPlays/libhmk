@@ -118,9 +118,9 @@ void matrix_scan(void) {
       key_matrix[i].is_pressed =
           (key_matrix[i].distance >= actuation->actuation_point);
     } else {
-      const uint8_t reset_point =
+      const uint16_t reset_point =
           actuation->continuous ? 0 : actuation->actuation_point;
-      const uint8_t rt_up =
+      const uint16_t rt_up =
           actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
 
       switch (key_matrix[i].key_dir) {

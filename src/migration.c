@@ -38,6 +38,10 @@ static bool v1_5_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_5_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
 
+static bool v1_6_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_6_profile_config_func(uint8_t profile, uint8_t *dst,
+                                     const uint8_t *src);
+
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
 static const migration_t migrations[] = {
@@ -66,7 +70,7 @@ static const migration_t migrations[] = {
     {
         .version = 0x0102,
         .global_config_size = 14             // Other fields
-                              + NUM_KEYS * 2 // Bottom-out threshold
+                               + NUM_KEYS * 2 // Bottom-out threshold
         ,
         .profile_config_size = NUM_LAYERS * NUM_KEYS    // Keymap
                                + NUM_KEYS * 4           // Actuation map
@@ -81,7 +85,7 @@ static const migration_t migrations[] = {
     {
         .version = 0x0103,
         .global_config_size = 14             // Other fields
-                              + NUM_KEYS * 2 // Bottom-out threshold
+                               + NUM_KEYS * 2 // Bottom-out threshold
         ,
         .profile_config_size = NUM_LAYERS * NUM_KEYS    // Keymap
                                + NUM_KEYS * 4           // Actuation map
@@ -96,7 +100,7 @@ static const migration_t migrations[] = {
     {
         .version = 0x0104,
         .global_config_size = 14             // Other fields
-                              + NUM_KEYS * 2 // Bottom-out threshold
+                               + NUM_KEYS * 2 // Bottom-out threshold
         ,
         .profile_config_size = NUM_LAYERS * NUM_KEYS    // Keymap
                                + NUM_KEYS * 4           // Actuation map
@@ -111,7 +115,7 @@ static const migration_t migrations[] = {
     {
         .version = 0x0105,
         .global_config_size = 14             // Other fields
-                              + NUM_KEYS * 3 // Bottom-out threshold and switch_travel
+                               + NUM_KEYS * 3 // Bottom-out threshold and switch_travel
         ,
         .profile_config_size = NUM_LAYERS * NUM_KEYS    // Keymap
                                + NUM_KEYS * 4           // Actuation map
@@ -122,6 +126,21 @@ static const migration_t migrations[] = {
         ,
         .global_config_func = v1_5_global_config_func,
         .profile_config_func = v1_5_profile_config_func,
+    },
+    {
+        .version = 0x0106,
+        .global_config_size = 14             // Other fields
+                               + NUM_KEYS * 3 // Bottom-out threshold and switch_travel
+        ,
+        .profile_config_size = NUM_LAYERS * NUM_KEYS    // Keymap
+                               + NUM_KEYS * 7           // Actuation map (16-bit)
+                               + NUM_ADVANCED_KEYS * 12 // Advanced keys
+                               + NUM_KEYS               // Gamepad buttons
+                               + 9                      // Gamepad options
+                               + 1                      // Tick rate
+        ,
+        .global_config_func = v1_6_global_config_func,
+        .profile_config_func = v1_6_profile_config_func,
     },
 };
 
@@ -384,6 +403,49 @@ bool v1_5_profile_config_func(uint8_t profile, uint8_t *dst,
   migration_memcpy(&dst, &src,
                    NUM_LAYERS * NUM_KEYS + NUM_KEYS * 4 +
                        NUM_ADVANCED_KEYS * 12 + NUM_KEYS + 9 + 1);
+
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.5 -> v1.6 Migration
+//--------------------------------------------------------------------+
+
+bool v1_6_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0105)
+    // Expected version v1.5
+    return false;
+
+  // Copy global fields directly (sizes of global fields are identical)
+  migration_memcpy(&dst, &src, 14 + NUM_KEYS * 3);
+
+  return true;
+}
+
+bool v1_6_profile_config_func(uint8_t profile, uint8_t *dst,
+                              const uint8_t *src) {
+  // Copy Keymap
+  migration_memcpy(&dst, &src, NUM_LAYERS * NUM_KEYS);
+
+  // Convert Actuation Map from 8-bit to 16-bit
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    uint8_t old_actuation_point = *src++;
+    uint8_t old_rt_down = *src++;
+    uint8_t old_rt_up = *src++;
+    bool continuous = *src++;
+
+    uint16_t new_actuation_point = ((uint16_t)old_actuation_point * 10000) / 255;
+    uint16_t new_rt_down = ((uint16_t)old_rt_down * 10000) / 255;
+    uint16_t new_rt_up = ((uint16_t)old_rt_up * 10000) / 255;
+
+    *(uint16_t *)dst = new_actuation_point; dst += 2;
+    *(uint16_t *)dst = new_rt_down; dst += 2;
+    *(uint16_t *)dst = new_rt_up; dst += 2;
+    *dst++ = continuous;
+  }
+
+  // Copy Advanced keys, Gamepad buttons, Gamepad options, Tick rate
+  migration_memcpy(&dst, &src, NUM_ADVANCED_KEYS * 12 + NUM_KEYS + 9 + 1);
 
   return true;
 }

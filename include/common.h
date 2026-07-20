@@ -97,12 +97,12 @@ _Static_assert(1 <= NUM_ADVANCED_KEYS && NUM_ADVANCED_KEYS <= 64,
 // enabled. If `rt_up` is non-zero, both `rt_down` and `rt_up` are used to
 // configure the Rapid Trigger press and release sensitivity, respectively.
 typedef struct __attribute__((packed)) {
-  // Actuation point (0-255)
-  uint8_t actuation_point;
-  // Rapid Trigger press sensitivity (0-255)
-  uint8_t rt_down;
-  // Rapid Trigger release sensitivity (0-255)
-  uint8_t rt_up;
+  // Actuation point (0-10000)
+  uint16_t actuation_point;
+  // Rapid Trigger press sensitivity (0-10000)
+  uint16_t rt_down;
+  // Rapid Trigger release sensitivity (0-10000)
+  uint16_t rt_up;
   // Whether Continuous Rapid Trigger is enabled
   bool continuous;
 } actuation_t;

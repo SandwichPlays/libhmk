@@ -94,7 +94,7 @@ typedef struct __attribute__((packed)) {
   uint8_t profile;
   uint8_t offset;
   uint8_t len;
-  actuation_t actuation_map[15];
+  actuation_t actuation_map[8];
 } command_in_actuation_map_t;
 
 typedef struct __attribute__((packed)) {
@@ -150,7 +150,7 @@ _Static_assert(sizeof(command_in_buffer_t) <= RAW_HID_EP_SIZE,
 
 typedef struct __attribute__((packed)) {
   uint16_t adc_value;
-  uint8_t distance;
+  uint16_t distance;
 } command_out_analog_info_t;
 
 typedef struct __attribute__((packed)) {
@@ -165,7 +165,7 @@ typedef struct __attribute__((packed)) {
     // For `COMMAND_FIRMWARE_VERSION`
     uint16_t firmware_version;
     // For `COMMAND_ANALOG_INFO`
-    command_out_analog_info_t analog_info[21];
+    command_out_analog_info_t analog_info[15];
     // For `COMMAND_GET_CALIBRATION`
     eeconfig_calibration_t calibration;
     // For `COMMAND_GET_PROFILE`
@@ -180,7 +180,7 @@ typedef struct __attribute__((packed)) {
     // For `COMMAND_GET_KEYMAP`
     uint8_t keymap[63];
     // For `COMMAND_GET_ACTUATION_MAP`
-    actuation_t actuation_map[15];
+    actuation_t actuation_map[8];
     // For `COMMAND_GET_ADVANCED_KEYS`
     advanced_key_t advanced_keys[5];
     // For `COMMAND_GET_TICK_RATE`
