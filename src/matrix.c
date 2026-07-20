@@ -92,6 +92,18 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     }
   }
 
+  // Auto-calculate initial_rest_value fallback (median of all key rest values)
+  uint32_t rest_sum = 0;
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    rest_sum += key_matrix[i].adc_rest_value;
+  }
+  uint16_t avg_rest = (uint16_t)(rest_sum / NUM_KEYS);
+  if (avg_rest > 0) {
+    eeconfig_calibration_t calib = eeconfig->calibration;
+    calib.initial_rest_value = avg_rest;
+    EECONFIG_WRITE(calibration, &calib);
+  }
+
   // Boot protection check: If key was held down during plug-in, reject sample
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     if (key_matrix[i].adc_rest_value >
@@ -127,17 +139,27 @@ void matrix_start_manual_calibration(const uint8_t *keys, uint8_t count) {
 void matrix_finish_manual_calibration(bool save) {
   if (save) {
     uint16_t bottom_out_threshold[NUM_KEYS];
+    uint32_t delta_sum = 0;
+    uint32_t delta_count = 0;
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
       bottom_out_threshold[i] = eeconfig->bottom_out_threshold[i];
       if (manual_calib_status[i] == CALIB_STATE_COMPLETED ||
           manual_calib_status[i] == CALIB_STATE_RECORDING) {
         if (manual_calib_peak[i] > key_matrix[i].adc_rest_value + 50) {
-          bottom_out_threshold[i] =
-              manual_calib_peak[i] - key_matrix[i].adc_rest_value;
+          uint16_t delta = manual_calib_peak[i] - key_matrix[i].adc_rest_value;
+          bottom_out_threshold[i] = delta;
+          delta_sum += delta;
+          delta_count++;
         }
       }
     }
     EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
+
+    if (delta_count > 0) {
+      eeconfig_calibration_t calib = eeconfig->calibration;
+      calib.initial_bottom_out_threshold = (uint16_t)(delta_sum / delta_count);
+      EECONFIG_WRITE(calibration, &calib);
+    }
   }
   manual_calib_active = false;
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
