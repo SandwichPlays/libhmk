@@ -48,6 +48,10 @@ key_state_t key_matrix[NUM_KEYS];
 // Bitmap for tracking which keys have Rapid Trigger disabled
 static bitmap_t rapid_trigger_disabled[] = MAKE_BITMAP(NUM_KEYS);
 
+static bool manual_calib_active = false;
+static uint8_t manual_calib_status[NUM_KEYS] = {0};
+static uint16_t manual_calib_peak[NUM_KEYS] = {0};
+
 void matrix_init(void) { matrix_recalibrate(false); }
 
 void matrix_recalibrate(bool reset_bottom_out_threshold) {
@@ -85,13 +89,66 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
         // Only update the rest value if the new value is smaller and the
         // difference is at least the calibration epsilon
         key_matrix[i].adc_rest_value = new_adc_filtered;
-
-      // Update the bottom-out value to be the minimum bottom-out value based on
-      // the updated rest value
-      key_matrix[i].adc_bottom_out_value =
-          matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
     }
   }
+
+  // Boot protection check: If key was held down during plug-in, reject sample
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    if (key_matrix[i].adc_rest_value >
+        eeconfig->calibration.initial_rest_value + 150) {
+      key_matrix[i].adc_rest_value = eeconfig->calibration.initial_rest_value;
+    }
+    key_matrix[i].adc_bottom_out_value =
+        matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+  }
+}
+
+void matrix_start_manual_calibration(const uint8_t *keys, uint8_t count) {
+  manual_calib_active = true;
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    bool target = (count == 0);
+    if (!target && keys != NULL) {
+      for (uint8_t k = 0; k < count; k++) {
+        if (keys[k] == i) {
+          target = true;
+          break;
+        }
+      }
+    }
+    if (target) {
+      manual_calib_status[i] = CALIB_STATE_WAITING;
+      manual_calib_peak[i] = key_matrix[i].adc_rest_value;
+    } else {
+      manual_calib_status[i] = CALIB_STATE_IDLE;
+    }
+  }
+}
+
+void matrix_finish_manual_calibration(bool save) {
+  if (save) {
+    uint16_t bottom_out_threshold[NUM_KEYS];
+    for (uint32_t i = 0; i < NUM_KEYS; i++) {
+      bottom_out_threshold[i] = eeconfig->bottom_out_threshold[i];
+      if (manual_calib_status[i] == CALIB_STATE_COMPLETED ||
+          manual_calib_status[i] == CALIB_STATE_RECORDING) {
+        if (manual_calib_peak[i] > key_matrix[i].adc_rest_value + 50) {
+          bottom_out_threshold[i] =
+              manual_calib_peak[i] - key_matrix[i].adc_rest_value;
+        }
+      }
+    }
+    EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
+  }
+  manual_calib_active = false;
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    manual_calib_status[i] = CALIB_STATE_IDLE;
+  }
+}
+
+uint8_t matrix_get_calibration_status(uint8_t key) {
+  if (key < NUM_KEYS)
+    return manual_calib_status[key];
+  return CALIB_STATE_IDLE;
 }
 
 void matrix_scan(void) {
@@ -103,11 +160,23 @@ void matrix_scan(void) {
 
     key_matrix[i].adc_filtered = new_adc_filtered;
 
-    if (new_adc_filtered >=
-        key_matrix[i].adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON)
-      // Only update the bottom-out value if the new value is larger and the
-      // difference is at least the calibration epsilon.
-      key_matrix[i].adc_bottom_out_value = new_adc_filtered;
+    if (manual_calib_active && manual_calib_status[i] != CALIB_STATE_IDLE) {
+      if (new_adc_filtered > key_matrix[i].adc_rest_value + 60) {
+        manual_calib_status[i] = CALIB_STATE_RECORDING;
+        if (new_adc_filtered > manual_calib_peak[i]) {
+          manual_calib_peak[i] = new_adc_filtered;
+        }
+      } else if (manual_calib_status[i] == CALIB_STATE_RECORDING &&
+                 new_adc_filtered <= key_matrix[i].adc_rest_value + 30) {
+        manual_calib_status[i] = CALIB_STATE_COMPLETED;
+        key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
+      }
+    } else if (eeconfig->bottom_out_threshold[i] == 0) {
+      // Dynamic auto-calibration running only when no static threshold is set
+      if (new_adc_filtered >=
+          key_matrix[i].adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON)
+        key_matrix[i].adc_bottom_out_value = new_adc_filtered;
+    }
 
     key_matrix[i].distance =
         adc_to_distance(new_adc_filtered, key_matrix[i].adc_rest_value,

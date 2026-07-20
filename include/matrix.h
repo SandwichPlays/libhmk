@@ -78,6 +78,13 @@ typedef struct {
 // Key matrix
 extern key_state_t key_matrix[NUM_KEYS];
 
+typedef enum {
+  CALIB_STATE_IDLE = 0,
+  CALIB_STATE_WAITING,
+  CALIB_STATE_RECORDING,
+  CALIB_STATE_COMPLETED,
+} key_calib_status_t;
+
 //--------------------------------------------------------------------+
 // Key Matrix API
 //--------------------------------------------------------------------+
@@ -100,6 +107,29 @@ void matrix_init(void);
  * @return None
  */
 void matrix_recalibrate(bool reset_bottom_out_threshold);
+
+/**
+ * @brief Start manual press calibration mode for specified keys
+ *
+ * @param keys Array of key indices to calibrate (NULL for all keys)
+ * @param count Number of keys in array (0 for all keys)
+ */
+void matrix_start_manual_calibration(const uint8_t *keys, uint8_t count);
+
+/**
+ * @brief Finish manual press calibration mode and option to save to EEPROM
+ *
+ * @param save Whether to save recorded thresholds to EEPROM
+ */
+void matrix_finish_manual_calibration(bool save);
+
+/**
+ * @brief Get current manual calibration status of a key
+ *
+ * @param key Key index
+ * @return Status enum (CALIB_STATE_IDLE, WAITING, RECORDING, COMPLETED)
+ */
+uint8_t matrix_get_calibration_status(uint8_t key);
 
 /**
  * @brief Update the key matrix to reflect the current state of the keys

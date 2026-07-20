@@ -72,7 +72,18 @@ void command_process(const uint8_t *buf) {
          i < M_ARRAY_SIZE(out->analog_info) && i + p->offset < NUM_KEYS; i++) {
       o[i].adc_value = key_matrix[i + p->offset].adc_filtered;
       o[i].distance = key_matrix[i + p->offset].distance;
+      o[i].status = matrix_get_calibration_status(i + p->offset);
     }
+    break;
+  }
+  case COMMAND_START_MANUAL_CALIBRATION: {
+    const command_in_start_manual_calib_t *p = &in->start_manual_calib;
+    matrix_start_manual_calibration(p->keys, p->count);
+    break;
+  }
+  case COMMAND_FINISH_MANUAL_CALIBRATION: {
+    const command_in_finish_manual_calib_t *p = &in->finish_manual_calib;
+    matrix_finish_manual_calibration(p->save != 0);
     break;
   }
   case COMMAND_GET_CALIBRATION: {

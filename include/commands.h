@@ -40,6 +40,8 @@ typedef enum {
   COMMAND_GET_METADATA,
   COMMAND_GET_SERIAL,
   COMMAND_SAVE_CALIBRATION_THRESHOLD,
+  COMMAND_START_MANUAL_CALIBRATION,
+  COMMAND_FINISH_MANUAL_CALIBRATION,
 
   COMMAND_GET_KEYMAP = 128,
   COMMAND_SET_KEYMAP,
@@ -121,6 +123,15 @@ typedef struct __attribute__((packed)) {
   gamepad_options_t gamepad_options;
 } command_in_gamepad_options_t;
 
+typedef struct __attribute__((packed)) {
+  uint8_t count;
+  uint8_t keys[60];
+} command_in_start_manual_calib_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t save;
+} command_in_finish_manual_calib_t;
+
 // Command input buffer type
 typedef struct __attribute__((packed)) {
   uint8_t command_id;
@@ -138,6 +149,8 @@ typedef struct __attribute__((packed)) {
     command_in_tick_rate_t tick_rate;
     command_in_gamepad_buttons_t gamepad_buttons;
     command_in_gamepad_options_t gamepad_options;
+    command_in_start_manual_calib_t start_manual_calib;
+    command_in_finish_manual_calib_t finish_manual_calib;
   };
 } command_in_buffer_t;
 
@@ -151,6 +164,7 @@ _Static_assert(sizeof(command_in_buffer_t) <= RAW_HID_EP_SIZE,
 typedef struct __attribute__((packed)) {
   uint16_t adc_value;
   uint16_t distance;
+  uint8_t status;
 } command_out_analog_info_t;
 
 typedef struct __attribute__((packed)) {
@@ -165,7 +179,7 @@ typedef struct __attribute__((packed)) {
     // For `COMMAND_FIRMWARE_VERSION`
     uint16_t firmware_version;
     // For `COMMAND_ANALOG_INFO`
-    command_out_analog_info_t analog_info[15];
+    command_out_analog_info_t analog_info[12];
     // For `COMMAND_GET_CALIBRATION`
     eeconfig_calibration_t calibration;
     // For `COMMAND_GET_PROFILE`
