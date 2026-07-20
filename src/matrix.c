@@ -212,7 +212,9 @@ void matrix_scan(void) {
       const uint16_t reset_point =
           actuation->continuous ? 0 : actuation->actuation_point;
       const uint16_t rt_up =
-          actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
+          actuation->rt_up == 0
+              ? actuation->rt_down
+              : M_MAX(actuation->rt_up, actuation->rt_down);
 
       switch (key_matrix[i].key_dir) {
       case KEY_DIR_INACTIVE:
