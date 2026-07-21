@@ -259,7 +259,7 @@ void matrix_scan(void) {
             key_matrix[i].extremum = key_matrix[i].distance;
             key_matrix[i].key_dir = KEY_DIR_INACTIVE;
             key_matrix[i].is_pressed = false;
-          } else if (key_matrix[i].extremum + actuation->rt_down + 50 <
+          } else if (key_matrix[i].extremum + actuation->rt_down <
                      key_matrix[i].distance) {
             // Pressed by Rapid Trigger
             key_matrix[i].extremum = key_matrix[i].distance;
