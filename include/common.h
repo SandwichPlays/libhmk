@@ -105,6 +105,10 @@ typedef struct __attribute__((packed)) {
   uint16_t rt_up;
   // Whether Continuous Rapid Trigger is enabled
   bool continuous;
+  // Top Rapid Trigger deadzone distance (0-10000)
+  uint16_t rt_deadzone_top;
+  // Bottom Rapid Trigger deadzone distance (0-10000)
+  uint16_t rt_deadzone_bottom;
 } actuation_t;
 
 // Advanced key types

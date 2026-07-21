@@ -96,7 +96,7 @@ typedef struct __attribute__((packed)) {
   uint8_t profile;
   uint8_t offset;
   uint8_t len;
-  actuation_t actuation_map[8];
+  actuation_t actuation_map[5];
 } command_in_actuation_map_t;
 
 typedef struct __attribute__((packed)) {
@@ -194,7 +194,7 @@ typedef struct __attribute__((packed)) {
     // For `COMMAND_GET_KEYMAP`
     uint8_t keymap[63];
     // For `COMMAND_GET_ACTUATION_MAP`
-    actuation_t actuation_map[8];
+    actuation_t actuation_map[5];
     // For `COMMAND_GET_ADVANCED_KEYS`
     advanced_key_t advanced_keys[5];
     // For `COMMAND_GET_TICK_RATE`

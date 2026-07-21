@@ -42,6 +42,10 @@ static bool v1_6_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_6_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
 
+static bool v1_7_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_7_profile_config_func(uint8_t profile, uint8_t *dst,
+                                     const uint8_t *src);
+
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
 static const migration_t migrations[] = {
@@ -141,6 +145,21 @@ static const migration_t migrations[] = {
         ,
         .global_config_func = v1_6_global_config_func,
         .profile_config_func = v1_6_profile_config_func,
+    },
+    {
+        .version = 0x0107,
+        .global_config_size = 14             // Other fields
+                               + NUM_KEYS * 3 // Bottom-out threshold and switch_travel
+        ,
+        .profile_config_size = NUM_LAYERS * NUM_KEYS    // Keymap
+                               + NUM_KEYS * 11          // Actuation map (16-bit + deadzones)
+                               + NUM_ADVANCED_KEYS * 12 // Advanced keys
+                               + NUM_KEYS               // Gamepad buttons
+                               + 9                      // Gamepad options
+                               + 1                      // Tick rate
+        ,
+        .global_config_func = v1_7_global_config_func,
+        .profile_config_func = v1_7_profile_config_func,
     },
 };
 
@@ -442,6 +461,39 @@ bool v1_6_profile_config_func(uint8_t profile, uint8_t *dst,
     *(uint16_t *)dst = new_rt_down; dst += 2;
     *(uint16_t *)dst = new_rt_up; dst += 2;
     *dst++ = continuous;
+  }
+
+  // Copy Advanced keys, Gamepad buttons, Gamepad options, Tick rate
+  migration_memcpy(&dst, &src, NUM_ADVANCED_KEYS * 12 + NUM_KEYS + 9 + 1);
+
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.6 -> v1.7 Migration
+//--------------------------------------------------------------------+
+
+bool v1_7_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0106)
+    // Expected version v1.6
+    return false;
+
+  // Copy global fields directly
+  migration_memcpy(&dst, &src, 14 + NUM_KEYS * 3);
+
+  return true;
+}
+
+bool v1_7_profile_config_func(uint8_t profile, uint8_t *dst,
+                              const uint8_t *src) {
+  // Copy Keymap
+  migration_memcpy(&dst, &src, NUM_LAYERS * NUM_KEYS);
+
+  // Add deadzones to Actuation Map
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    migration_memcpy(&dst, &src, 7); // 3x uint16_t + 1x bool
+    *(uint16_t *)dst = 0; dst += 2; // rt_deadzone_top
+    *(uint16_t *)dst = 0; dst += 2; // rt_deadzone_bottom
   }
 
   // Copy Advanced keys, Gamepad buttons, Gamepad options, Tick rate

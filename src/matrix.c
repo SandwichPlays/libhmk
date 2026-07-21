@@ -209,58 +209,73 @@ void matrix_scan(void) {
       key_matrix[i].is_pressed =
           (key_matrix[i].distance >= actuation->actuation_point);
     } else {
-      const uint16_t reset_point =
-          actuation->continuous ? 0 : actuation->actuation_point;
-      const uint16_t rt_up =
-          actuation->rt_up == 0
-              ? actuation->rt_down
-              : M_MAX(actuation->rt_up, actuation->rt_down);
+      const uint16_t dist = key_matrix[i].distance;
+      const uint16_t top_dz = actuation->rt_deadzone_top;
+      const uint16_t bot_dz = actuation->rt_deadzone_bottom;
+      const uint16_t bot_limit = (bot_dz < 10000) ? (10000 - bot_dz) : 10000;
 
-      switch (key_matrix[i].key_dir) {
-      case KEY_DIR_INACTIVE:
-        if (key_matrix[i].distance > actuation->actuation_point) {
-          // Pressed down past actuation point
-          key_matrix[i].extremum = key_matrix[i].distance;
-          key_matrix[i].key_dir = KEY_DIR_DOWN;
-          key_matrix[i].is_pressed = true;
+      if (dist <= top_dz) {
+        key_matrix[i].extremum = dist;
+        key_matrix[i].key_dir = KEY_DIR_INACTIVE;
+        key_matrix[i].is_pressed = false;
+      } else if (dist >= bot_limit) {
+        key_matrix[i].extremum = dist;
+        key_matrix[i].key_dir = KEY_DIR_DOWN;
+        key_matrix[i].is_pressed = true;
+      } else {
+        const uint16_t reset_point =
+            actuation->continuous ? 0 : actuation->actuation_point;
+        const uint16_t rt_up =
+            actuation->rt_up == 0
+                ? actuation->rt_down
+                : M_MAX(actuation->rt_up, actuation->rt_down);
+
+        switch (key_matrix[i].key_dir) {
+        case KEY_DIR_INACTIVE:
+          if (key_matrix[i].distance > actuation->actuation_point) {
+            // Pressed down past actuation point
+            key_matrix[i].extremum = key_matrix[i].distance;
+            key_matrix[i].key_dir = KEY_DIR_DOWN;
+            key_matrix[i].is_pressed = true;
+          }
+          break;
+
+        case KEY_DIR_DOWN:
+          if (key_matrix[i].distance <= reset_point) {
+            // Released past reset point
+            key_matrix[i].extremum = key_matrix[i].distance;
+            key_matrix[i].key_dir = KEY_DIR_INACTIVE;
+            key_matrix[i].is_pressed = false;
+          } else if (key_matrix[i].distance + rt_up < key_matrix[i].extremum) {
+            // Released by Rapid Trigger
+            key_matrix[i].extremum = key_matrix[i].distance;
+            key_matrix[i].key_dir = KEY_DIR_UP;
+            key_matrix[i].is_pressed = false;
+          } else if (key_matrix[i].distance > key_matrix[i].extremum)
+            // Pressed down further
+            key_matrix[i].extremum = key_matrix[i].distance;
+          break;
+
+        case KEY_DIR_UP:
+          if (key_matrix[i].distance <= reset_point) {
+            // Released past reset point
+            key_matrix[i].extremum = key_matrix[i].distance;
+            key_matrix[i].key_dir = KEY_DIR_INACTIVE;
+            key_matrix[i].is_pressed = false;
+          } else if (key_matrix[i].extremum + actuation->rt_down <
+                     key_matrix[i].distance) {
+            // Pressed by Rapid Trigger
+            key_matrix[i].extremum = key_matrix[i].distance;
+            key_matrix[i].key_dir = KEY_DIR_DOWN;
+            key_matrix[i].is_pressed = true;
+          } else if (key_matrix[i].distance < key_matrix[i].extremum)
+            // Released further
+            key_matrix[i].extremum = key_matrix[i].distance;
+          break;
+
+        default:
+          break;
         }
-        break;
-
-      case KEY_DIR_DOWN:
-        if (key_matrix[i].distance <= reset_point) {
-          // Released past reset point
-          key_matrix[i].extremum = key_matrix[i].distance;
-          key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-          key_matrix[i].is_pressed = false;
-        } else if (key_matrix[i].distance + rt_up < key_matrix[i].extremum) {
-          // Released by Rapid Trigger
-          key_matrix[i].extremum = key_matrix[i].distance;
-          key_matrix[i].key_dir = KEY_DIR_UP;
-          key_matrix[i].is_pressed = false;
-        } else if (key_matrix[i].distance > key_matrix[i].extremum)
-          // Pressed down further
-          key_matrix[i].extremum = key_matrix[i].distance;
-        break;
-
-      case KEY_DIR_UP:
-        if (key_matrix[i].distance <= reset_point) {
-          // Released past reset point
-          key_matrix[i].extremum = key_matrix[i].distance;
-          key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-          key_matrix[i].is_pressed = false;
-        } else if (key_matrix[i].extremum + actuation->rt_down <
-                   key_matrix[i].distance) {
-          // Pressed by Rapid Trigger
-          key_matrix[i].extremum = key_matrix[i].distance;
-          key_matrix[i].key_dir = KEY_DIR_DOWN;
-          key_matrix[i].is_pressed = true;
-        } else if (key_matrix[i].distance < key_matrix[i].extremum)
-          // Released further
-          key_matrix[i].extremum = key_matrix[i].distance;
-        break;
-
-      default:
-        break;
       }
     }
   }
