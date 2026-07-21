@@ -280,7 +280,7 @@ void matrix_scan(void) {
     // 0ms Latency Lockout Debounce: Instant key actuation on frame 0, 
     // with 2ms lockout window against electrical noise chatter.
     if (next_pressed != key_matrix[i].is_pressed) {
-      if (timer_elapsed(key_matrix[i].last_state_change_time) >= MATRIX_DEBOUNCE_MS) {
+      if (timer_elapsed(key_matrix[i].last_state_change_time) >= eeconfig->options.debounce_ms) {
         key_matrix[i].is_pressed = next_pressed;
         key_matrix[i].last_state_change_time = timer_read();
       }

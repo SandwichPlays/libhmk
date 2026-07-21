@@ -53,8 +53,10 @@ typedef union __attribute__((packed)) {
     // Whether 8kHz polling rate is enabled. Only applicable if USB HS is
     // enabled. If disabled, the 1kHz polling rate is used instead.
     bool high_polling_rate_enabled : 1;
+    // Lockout debounce duration in milliseconds (0-15ms)
+    uint16_t debounce_ms : 4;
     // Reserved bits for future use
-    uint16_t reserved : 13;
+    uint16_t reserved : 9;
   };
   uint16_t raw;
 } eeconfig_options_t;
@@ -130,6 +132,7 @@ extern const eeconfig_t *eeconfig;
   {                                                                            \
       .xinput_enabled = false,                                                 \
       .high_polling_rate_enabled = true,                                       \
+      .debounce_ms = 2,                                                        \
   }
 #endif
 
