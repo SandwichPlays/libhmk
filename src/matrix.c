@@ -60,22 +60,26 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
   }
 
+  // 1. Flush EMA filter and sample live ADC readings
+  for (uint32_t step = 0; step < 16; step++) {
+    analog_task();
+    for (uint32_t i = 0; i < NUM_KEYS; i++) {
+      key_matrix[i].adc_filtered = matrix_analog_read(i);
+    }
+  }
+
+  // 2. Initialize rest values to current live ADC readings
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    key_matrix[i].adc_filtered = eeconfig->calibration.initial_rest_value;
-    key_matrix[i].adc_rest_value = eeconfig->calibration.initial_rest_value;
-    key_matrix[i].adc_bottom_out_value =
-        matrix_bottom_out_value(i, eeconfig->calibration.initial_rest_value);
+    key_matrix[i].adc_rest_value = key_matrix[i].adc_filtered;
     key_matrix[i].distance = 0;
     key_matrix[i].extremum = 0;
     key_matrix[i].key_dir = KEY_DIR_INACTIVE;
     key_matrix[i].is_pressed = false;
   }
 
-  // We only calibrate the rest value. The bottom-out value will be updated
-  // during the scan process.
+  // 3. Track resting noise during calibration duration
   const uint32_t calibration_start = timer_read();
   while (timer_elapsed(calibration_start) < MATRIX_CALIBRATION_DURATION) {
-    // Run the analog task to possibly update the ADC values
     analog_task();
 
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
@@ -84,15 +88,13 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
 
       key_matrix[i].adc_filtered = new_adc_filtered;
 
-      if (new_adc_filtered + MATRIX_CALIBRATION_EPSILON <=
-          key_matrix[i].adc_rest_value)
-        // Only update the rest value if the new value is smaller and the
-        // difference is at least the calibration epsilon
+      if (new_adc_filtered < key_matrix[i].adc_rest_value) {
         key_matrix[i].adc_rest_value = new_adc_filtered;
+      }
     }
   }
 
-  // Auto-calculate initial_rest_value fallback (median of all key rest values)
+  // 4. Update initial_rest_value in EEPROM to average of actual rest values
   uint32_t rest_sum = 0;
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     rest_sum += key_matrix[i].adc_rest_value;
@@ -104,12 +106,8 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     EECONFIG_WRITE(calibration, &calib);
   }
 
-  // Boot protection check: If key was held down during plug-in, reject sample
+  // 5. Update bottom out values using the fresh rest values
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    if (key_matrix[i].adc_rest_value >
-        eeconfig->calibration.initial_rest_value + 150) {
-      key_matrix[i].adc_rest_value = eeconfig->calibration.initial_rest_value;
-    }
     key_matrix[i].adc_bottom_out_value =
         matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
   }
