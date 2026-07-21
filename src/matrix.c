@@ -114,6 +114,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
 }
 
 void matrix_start_manual_calibration(const uint8_t *keys, uint8_t count) {
+  matrix_recalibrate(false);
   manual_calib_active = true;
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     bool target = (count == 0);
