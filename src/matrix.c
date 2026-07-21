@@ -203,10 +203,11 @@ void matrix_scan(void) {
         adc_to_distance(new_adc_filtered, key_matrix[i].adc_rest_value,
                         key_matrix[i].adc_bottom_out_value);
 
+    bool next_pressed = key_matrix[i].is_pressed;
+
     if (bitmap_get(rapid_trigger_disabled, i) | (actuation->rt_down == 0)) {
       key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-      key_matrix[i].is_pressed =
-          (key_matrix[i].distance >= actuation->actuation_point);
+      next_pressed = (key_matrix[i].distance >= actuation->actuation_point);
     } else {
       const uint16_t dist = key_matrix[i].distance;
       const uint16_t top_dz = actuation->rt_deadzone_top;
@@ -216,11 +217,11 @@ void matrix_scan(void) {
       if (dist <= top_dz) {
         key_matrix[i].extremum = dist;
         key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-        key_matrix[i].is_pressed = false;
+        next_pressed = false;
       } else if (dist >= bot_limit) {
         key_matrix[i].extremum = dist;
         key_matrix[i].key_dir = KEY_DIR_DOWN;
-        key_matrix[i].is_pressed = true;
+        next_pressed = true;
       } else {
         const uint16_t reset_point =
             actuation->continuous ? 0 : actuation->actuation_point;
@@ -233,7 +234,7 @@ void matrix_scan(void) {
             // Pressed down past actuation point
             key_matrix[i].extremum = key_matrix[i].distance;
             key_matrix[i].key_dir = KEY_DIR_DOWN;
-            key_matrix[i].is_pressed = true;
+            next_pressed = true;
           }
           break;
 
@@ -242,12 +243,12 @@ void matrix_scan(void) {
             // Released past reset point
             key_matrix[i].extremum = key_matrix[i].distance;
             key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-            key_matrix[i].is_pressed = false;
+            next_pressed = false;
           } else if (key_matrix[i].distance + rt_up < key_matrix[i].extremum) {
             // Released by Rapid Trigger
             key_matrix[i].extremum = key_matrix[i].distance;
             key_matrix[i].key_dir = KEY_DIR_UP;
-            key_matrix[i].is_pressed = false;
+            next_pressed = false;
           } else if (key_matrix[i].distance > key_matrix[i].extremum)
             // Pressed down further
             key_matrix[i].extremum = key_matrix[i].distance;
@@ -258,13 +259,13 @@ void matrix_scan(void) {
             // Released past reset point
             key_matrix[i].extremum = key_matrix[i].distance;
             key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-            key_matrix[i].is_pressed = false;
+            next_pressed = false;
           } else if (key_matrix[i].extremum + actuation->rt_down <
                      key_matrix[i].distance) {
             // Pressed by Rapid Trigger
             key_matrix[i].extremum = key_matrix[i].distance;
             key_matrix[i].key_dir = KEY_DIR_DOWN;
-            key_matrix[i].is_pressed = true;
+            next_pressed = true;
           } else if (key_matrix[i].distance < key_matrix[i].extremum)
             // Released further
             key_matrix[i].extremum = key_matrix[i].distance;
@@ -273,6 +274,15 @@ void matrix_scan(void) {
         default:
           break;
         }
+      }
+    }
+
+    // 0ms Latency Lockout Debounce: Instant key actuation on frame 0, 
+    // with 2ms lockout window against electrical noise chatter.
+    if (next_pressed != key_matrix[i].is_pressed) {
+      if (timer_elapsed(key_matrix[i].last_state_change_time) >= MATRIX_DEBOUNCE_MS) {
+        key_matrix[i].is_pressed = next_pressed;
+        key_matrix[i].last_state_change_time = timer_read();
       }
     }
   }

@@ -40,10 +40,9 @@
 #define MATRIX_CALIBRATION_EPSILON 5
 #endif
 
-#if !defined(MATRIX_INACTIVITY_TIMEOUT)
-// Inactivity timeout in milliseconds. Bottom-out threshold will be saved after
-// there is no change to the threshold of any key for this duration.
-#define MATRIX_INACTIVITY_TIMEOUT 3000
+#if !defined(MATRIX_DEBOUNCE_MS)
+// Lockout debounce duration in milliseconds to prevent double-clicking/chatter
+#define MATRIX_DEBOUNCE_MS 2
 #endif
 
 //--------------------------------------------------------------------+
@@ -73,6 +72,8 @@ typedef struct {
   uint8_t key_dir;
   // Whether the key is pressed
   bool is_pressed;
+  // Timestamp of the last key state change for 0ms-latency lockout debounce
+  uint32_t last_state_change_time;
 } key_state_t;
 
 // Key matrix
