@@ -75,8 +75,8 @@
     "encoders": [
       {
         "keys": [
-          5,
-          4
+          4,
+          5
         ],
         "buttonKey": 6,
         "x": 0,
