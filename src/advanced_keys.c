@@ -61,8 +61,8 @@ static void advanced_key_null_bind(const advanced_key_event_t *event) {
   if (is_pressed[0] & is_pressed[1]) {
     // Both keys are pressed so we perform the Null Bind resolution.
     if ((null_bind->bottom_out_point > 0) &&
-        ((key_matrix[keys[0]].distance >= null_bind->bottom_out_point) &
-         (key_matrix[keys[1]].distance >= null_bind->bottom_out_point)))
+        ((key_matrix[keys[0]].distance >= (uint32_t)null_bind->bottom_out_point * 10000 / 255) &
+         (key_matrix[keys[1]].distance >= (uint32_t)null_bind->bottom_out_point * 10000 / 255)))
       // Input on both bottom out is enabled and both keys are bottomed out so
       // we register both keys.
       is_pressed[0] = is_pressed[1] = true;
@@ -113,7 +113,7 @@ static void advanced_key_dynamic_keystroke(const advanced_key_event_t *event) {
       &ak_states[event->ak_index].dynamic_keystroke;
 
   const bool is_bottomed_out =
-      (key_matrix[event->key].distance >= dks->bottom_out_point);
+      (key_matrix[event->key].distance >= (uint32_t)dks->bottom_out_point * 10000 / 255);
   uint8_t event_type = event->type;
 
   if (is_bottomed_out & !state->is_bottomed_out)
