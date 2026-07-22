@@ -103,7 +103,7 @@ typedef struct __attribute__((packed)) {
   uint8_t profile;
   uint8_t offset;
   uint8_t len;
-  advanced_key_t advanced_keys[5];
+  advanced_key_t advanced_keys[4];
 } command_in_advanced_keys_t;
 
 typedef struct __attribute__((packed)) {
@@ -196,7 +196,7 @@ typedef struct __attribute__((packed)) {
     // For `COMMAND_GET_ACTUATION_MAP`
     actuation_t actuation_map[5];
     // For `COMMAND_GET_ADVANCED_KEYS`
-    advanced_key_t advanced_keys[5];
+    advanced_key_t advanced_keys[4];
     // For `COMMAND_GET_TICK_RATE`
     uint8_t tick_rate;
     // For `COMMAND_GET_GAMEPAD_BUTTONS`

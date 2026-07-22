@@ -46,6 +46,10 @@ static bool v1_7_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_7_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
 
+static bool v1_8_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_8_profile_config_func(uint8_t profile, uint8_t *dst,
+                                     const uint8_t *src);
+
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
 static const migration_t migrations[] = {
@@ -160,6 +164,21 @@ static const migration_t migrations[] = {
         ,
         .global_config_func = v1_7_global_config_func,
         .profile_config_func = v1_7_profile_config_func,
+    },
+    {
+        .version = 0x0108,
+        .global_config_size = 14             // Other fields
+                               + NUM_KEYS * 3 // Bottom-out threshold and switch_travel
+        ,
+        .profile_config_size = NUM_LAYERS * NUM_KEYS    // Keymap
+                               + NUM_KEYS * 11          // Actuation map (16-bit + deadzones)
+                               + NUM_ADVANCED_KEYS * 13 // Advanced keys (16-bit bottom-out, 13 bytes each)
+                               + NUM_KEYS               // Gamepad buttons
+                               + 9                      // Gamepad options
+                               + 1                      // Tick rate
+        ,
+        .global_config_func = v1_8_global_config_func,
+        .profile_config_func = v1_8_profile_config_func,
     },
 };
 
@@ -498,6 +517,76 @@ bool v1_7_profile_config_func(uint8_t profile, uint8_t *dst,
 
   // Copy Advanced keys, Gamepad buttons, Gamepad options, Tick rate
   migration_memcpy(&dst, &src, NUM_ADVANCED_KEYS * 12 + NUM_KEYS + 9 + 1);
+
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.7 -> v1.8 Migration
+//--------------------------------------------------------------------+
+
+bool v1_8_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0107)
+    // Expected version v1.7
+    return false;
+
+  // Copy global fields directly
+  migration_memcpy(&dst, &src, 14 + NUM_KEYS * 3);
+
+  return true;
+}
+
+bool v1_8_profile_config_func(uint8_t profile, uint8_t *dst,
+                              const uint8_t *src) {
+  // 1. Copy Keymap
+  migration_memcpy(&dst, &src, NUM_LAYERS * NUM_KEYS);
+
+  // 2. Copy Actuation Map (including deadzones)
+  migration_memcpy(&dst, &src, NUM_KEYS * 11);
+
+  // 3. Migrate Advanced Keys from 12 bytes to 13 bytes
+  for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
+    uint8_t layer = *src++;
+    uint8_t key = *src++;
+    uint8_t type = *src++;
+
+    *dst++ = layer;
+    *dst++ = key;
+    *dst++ = type;
+
+    if (type == AK_TYPE_NULL_BIND) {
+      uint8_t secondary_key = *src++;
+      uint8_t behavior = *src++;
+      uint8_t old_bop = *src++;
+      src += 6; // skip unused bytes in 12-byte layout
+
+      uint16_t new_bop = ((uint16_t)old_bop * 10000) / 255;
+
+      *dst++ = secondary_key;
+      *dst++ = behavior;
+      *(uint16_t *)dst = new_bop; dst += 2;
+      memset(dst, 0, 6); dst += 6; // pad to 10 bytes union size
+    } else if (type == AK_TYPE_DYNAMIC_KEYSTROKE) {
+      uint8_t keycodes[4];
+      uint8_t bitmap[4];
+      for (int k = 0; k < 4; k++) keycodes[k] = *src++;
+      for (int k = 0; k < 4; k++) bitmap[k] = *src++;
+      uint8_t old_bop = *src++;
+
+      uint16_t new_bop = ((uint16_t)old_bop * 10000) / 255;
+
+      for (int k = 0; k < 4; k++) *dst++ = keycodes[k];
+      for (int k = 0; k < 4; k++) *dst++ = bitmap[k];
+      *(uint16_t *)dst = new_bop; dst += 2;
+    } else {
+      // For other types, they are smaller than 9 bytes in union, so just copy the 9 bytes of union data and pad with 1 byte
+      migration_memcpy(&dst, &src, 9);
+      *dst++ = 0; // pad to 10 bytes union size
+    }
+  }
+
+  // 4. Copy Gamepad buttons, Gamepad options, Tick rate
+  migration_memcpy(&dst, &src, NUM_KEYS + 9 + 1);
 
   return true;
 }

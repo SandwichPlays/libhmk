@@ -140,9 +140,9 @@ typedef enum {
 typedef struct __attribute__((packed)) {
   uint8_t secondary_key;
   uint8_t behavior;
-  // Bottom-out point (0-255). If non-zero, both keys will be registered if both
+  // Bottom-out point (0-10000). If non-zero, both keys will be registered if both
   // of them are pressed past this point, regardless of the behavior.
-  uint8_t bottom_out_point;
+  uint16_t bottom_out_point;
 } null_bind_t;
 
 // Dynamic Keystroke actions for each part of the keystroke
@@ -163,8 +163,8 @@ typedef struct __attribute__((packed)) {
   // Bit 4-5: Action for key release from bottom-out
   // Bit 6-7: Action for key release
   uint8_t bitmap[4];
-  // Bottom-out point (0-255)
-  uint8_t bottom_out_point;
+  // Bottom-out point (0-10000)
+  uint16_t bottom_out_point;
 } dynamic_keystroke_t;
 
 // Tap-Hold configuration
