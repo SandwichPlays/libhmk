@@ -225,7 +225,7 @@ void matrix_scan(void) {
     uint16_t range = (key_matrix[i].adc_bottom_out_value > key_matrix[i].adc_rest_value)
                      ? (key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value)
                      : 0;
-    uint16_t lenience = (uint16_t)(((uint32_t)range * 5) / 1000); // 0.5% lenience
+    uint16_t lenience = (uint16_t)(((uint32_t)range * 10) / 1000); // 1.0% lenience
     uint16_t real_rest_value = key_matrix[i].adc_rest_value + lenience;
 
     key_matrix[i].distance =
