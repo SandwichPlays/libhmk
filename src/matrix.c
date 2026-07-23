@@ -181,6 +181,14 @@ void matrix_scan(void) {
 
     key_matrix[i].adc_filtered = new_adc_filtered;
 
+    if (new_adc_filtered < key_matrix[i].adc_rest_value) {
+      key_matrix[i].adc_rest_value = new_adc_filtered;
+      if (!manual_calib_active || manual_calib_status[i] == CALIB_STATE_IDLE) {
+        key_matrix[i].adc_bottom_out_value =
+            matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+      }
+    }
+
     if (manual_calib_active && manual_calib_status[i] != CALIB_STATE_IDLE) {
       if (new_adc_filtered > key_matrix[i].adc_rest_value + 60) {
         manual_calib_status[i] = CALIB_STATE_RECORDING;
