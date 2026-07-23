@@ -194,10 +194,7 @@ void matrix_scan(void) {
       stable_timer[i] = timer_read();
     } else {
       if (timer_elapsed(stable_timer[i]) >= 15) {
-        uint16_t usual_rest = eeconfig->calibration.initial_rest_value;
-        if (usual_rest == 0) usual_rest = 1500;
-
-        if (new_adc_filtered < key_matrix[i].adc_rest_value && raw_val < usual_rest + 150) {
+        if (new_adc_filtered < key_matrix[i].adc_rest_value) {
           key_matrix[i].adc_rest_value = new_adc_filtered;
           if (!manual_calib_active || manual_calib_status[i] == CALIB_STATE_IDLE) {
             key_matrix[i].adc_bottom_out_value =
