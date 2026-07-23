@@ -222,8 +222,14 @@ void matrix_scan(void) {
         key_matrix[i].adc_bottom_out_value = new_adc_filtered;
     }
 
+    uint16_t range = (key_matrix[i].adc_bottom_out_value > key_matrix[i].adc_rest_value)
+                     ? (key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value)
+                     : 0;
+    uint16_t lenience = (uint16_t)(((uint32_t)range * 5) / 1000); // 0.5% lenience
+    uint16_t real_rest_value = key_matrix[i].adc_rest_value + lenience;
+
     key_matrix[i].distance =
-        adc_to_distance(new_adc_filtered, key_matrix[i].adc_rest_value,
+        adc_to_distance(new_adc_filtered, real_rest_value,
                         key_matrix[i].adc_bottom_out_value);
 
     bool next_pressed = key_matrix[i].is_pressed;
