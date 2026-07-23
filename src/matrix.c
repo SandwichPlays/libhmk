@@ -52,6 +52,9 @@ static bool manual_calib_active = false;
 static uint8_t manual_calib_status[NUM_KEYS] = {0};
 static uint16_t manual_calib_peak[NUM_KEYS] = {0};
 
+static uint32_t stable_timer[NUM_KEYS] = {0};
+static uint16_t prev_raw[NUM_KEYS] = {0};
+
 void matrix_init(void) { matrix_recalibrate(false); }
 
 void matrix_recalibrate(bool reset_bottom_out_threshold) {
@@ -75,6 +78,8 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     key_matrix[i].extremum = 0;
     key_matrix[i].key_dir = KEY_DIR_INACTIVE;
     key_matrix[i].is_pressed = false;
+    stable_timer[i] = timer_read();
+    prev_raw[i] = key_matrix[i].adc_filtered;
   }
 
   // 3. Track resting noise during calibration duration
@@ -175,17 +180,30 @@ uint8_t matrix_get_calibration_status(uint8_t key) {
 void matrix_scan(void) {
   // Only scan keys that are connected to analog inputs
   for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS; i++) {
+    const uint16_t raw_val = matrix_analog_read(i);
     const uint16_t new_adc_filtered =
-        EMA(matrix_analog_read(i), key_matrix[i].adc_filtered);
+        EMA(raw_val, key_matrix[i].adc_filtered);
     const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
 
     key_matrix[i].adc_filtered = new_adc_filtered;
 
-    if (new_adc_filtered < key_matrix[i].adc_rest_value) {
-      key_matrix[i].adc_rest_value = new_adc_filtered;
-      if (!manual_calib_active || manual_calib_status[i] == CALIB_STATE_IDLE) {
-        key_matrix[i].adc_bottom_out_value =
-            matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+    // Stability baseline tracking
+    int32_t diff = (int32_t)raw_val - (int32_t)prev_raw[i];
+    if (diff < -1 || diff > 1) {
+      stable_timer[i] = timer_read();
+      prev_raw[i] = raw_val;
+    } else {
+      if (timer_elapsed(stable_timer[i]) >= 100) {
+        uint16_t usual_rest = eeconfig->calibration.initial_rest_value;
+        if (usual_rest == 0) usual_rest = 1500;
+
+        if (new_adc_filtered < key_matrix[i].adc_rest_value && raw_val < usual_rest + 150) {
+          key_matrix[i].adc_rest_value = new_adc_filtered;
+          if (!manual_calib_active || manual_calib_status[i] == CALIB_STATE_IDLE) {
+            key_matrix[i].adc_bottom_out_value =
+                matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+          }
+        }
       }
     }
 
