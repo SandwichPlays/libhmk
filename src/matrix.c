@@ -181,19 +181,19 @@ void matrix_scan(void) {
   // Only scan keys that are connected to analog inputs
   for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS; i++) {
     const uint16_t raw_val = matrix_analog_read(i);
+    const uint16_t prev_filtered = key_matrix[i].adc_filtered;
     const uint16_t new_adc_filtered =
-        EMA(raw_val, key_matrix[i].adc_filtered);
+        EMA(raw_val, prev_filtered);
     const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
 
     key_matrix[i].adc_filtered = new_adc_filtered;
 
-    // Stability baseline tracking
-    int32_t diff = (int32_t)raw_val - (int32_t)prev_raw[i];
-    if (diff < -1 || diff > 1) {
+    // Stability baseline tracking (using filtered value to absorb noise, 15ms timer for fast tapping)
+    int32_t diff = (int32_t)new_adc_filtered - (int32_t)prev_filtered;
+    if (diff < -3 || diff > 3) {
       stable_timer[i] = timer_read();
-      prev_raw[i] = raw_val;
     } else {
-      if (timer_elapsed(stable_timer[i]) >= 100) {
+      if (timer_elapsed(stable_timer[i]) >= 15) {
         uint16_t usual_rest = eeconfig->calibration.initial_rest_value;
         if (usual_rest == 0) usual_rest = 1500;
 
