@@ -22,7 +22,7 @@
 // Adapted from https://www.azillionmonkeys.com/qed/ulerysqroot.pdf
 //--------------------------------------------------------------------+
 
-static uint16_t usqrt16(uint16_t x) {
+static inline uint16_t __attribute__((unused)) usqrt16(uint16_t x) {
   uint16_t t, g = 0;
 
 #define USQRT16_STEP(n)                                                        \
@@ -48,7 +48,7 @@ static uint16_t usqrt16(uint16_t x) {
   return g;
 }
 
-static uint32_t usqrt32(uint32_t x) {
+static inline uint32_t __attribute__((unused)) usqrt32(uint32_t x) {
   uint32_t t, g = 0;
 
 #define USQRT32_STEP(n)                                                        \

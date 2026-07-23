@@ -31,8 +31,9 @@
  *
  * @return X in circular coordinates
  */
-static uint8_t square_to_circular(uint8_t x, uint8_t y) {
-  return (uint16_t)x * usqrt16(255 * 255 - (((uint16_t)y * y) >> 1)) / 255;
+static uint16_t square_to_circular(uint16_t x, uint16_t y) {
+  uint32_t val = (uint32_t)10000 * 10000 - (((uint32_t)y * y) >> 1);
+  return (uint16_t)((uint32_t)x * usqrt32(val) / 10000);
 }
 
 /**
@@ -46,29 +47,35 @@ static uint8_t square_to_circular(uint8_t x, uint8_t y) {
  *
  * @return Processed analog value
  */
-static uint8_t apply_analog_curve(uint8_t value, bool *is_key_end_deadzone) {
+static uint16_t apply_analog_curve(uint16_t value, bool *is_key_end_deadzone) {
   const uint8_t (*curve)[2] = CURRENT_PROFILE.gamepad_options.analog_curve;
 
-  *is_key_end_deadzone = (value > curve[3][0]);
+  uint16_t curve_x[4], curve_y[4];
+  for (uint32_t i = 0; i < 4; i++) {
+    curve_x[i] = (uint16_t)((uint32_t)curve[i][0] * 10000 / 255);
+    curve_y[i] = (uint16_t)((uint32_t)curve[i][1] * 10000 / 255);
+  }
+
+  *is_key_end_deadzone = (value > curve_x[3]);
   if (*is_key_end_deadzone)
     // Key end deadzone
-    return 255;
+    return 10000;
 
-  if (value <= curve[0][0])
+  if (value <= curve_x[0])
     // Key start deadzone
     return 0;
 
   // Find the segment in the curve where the value falls
   uint8_t i = 0;
   for (; i < 3; i++) {
-    if (curve[i + 1][0] >= value)
+    if (curve_x[i + 1] >= value)
       break;
   }
 
-  const int16_t x1 = curve[i][0], y1 = curve[i][1];
-  const int16_t x2 = curve[i + 1][0], y2 = curve[i + 1][1];
+  const int32_t x1 = curve_x[i], y1 = curve_y[i];
+  const int32_t x2 = curve_x[i + 1], y2 = curve_y[i + 1];
 
-  return y1 + (y2 - y1) * (value - x1) / (x2 - x1);
+  return (uint16_t)(y1 + (y2 - y1) * ((int32_t)value - x1) / (x2 - x1));
 }
 
 // Mapping for digital gamepad buttons to XInput button bitmasks
@@ -154,19 +161,19 @@ void xinput_task(void) {
 
   bool is_key_end_deadzone = false;
   // Update trigger states in the report
-  report.lz =
-      apply_analog_curve(ANALOG_STATE(GP_BUTTON_LT), &is_key_end_deadzone);
-  report.rz =
-      apply_analog_curve(ANALOG_STATE(GP_BUTTON_RT), &is_key_end_deadzone);
-
+  uint16_t lz_val = apply_analog_curve(ANALOG_STATE(GP_BUTTON_LT), &is_key_end_deadzone);
+  report.lz = (uint8_t)((uint32_t)lz_val * 255 / 10000);
+  uint16_t rz_val = apply_analog_curve(ANALOG_STATE(GP_BUTTON_RT), &is_key_end_deadzone);
+  report.rz = (uint8_t)((uint32_t)rz_val * 255 / 10000);
+ 
   // lx, ly, rx, ry
   uint16_t joystick_states[4] = {0};
-
+ 
   // Combine joystick axes based on the configuration
   for (uint32_t i = 0; i < 4; i++) {
     const uint8_t neg_axis = joystick_axes[i][0];
     const uint8_t pos_axis = joystick_axes[i][1];
-
+ 
     if (CURRENT_PROFILE.gamepad_options.snappy_joystick)
       // For snappy joystick, we use the maximum value of opposite axes.
       joystick_states[i] =
@@ -174,42 +181,42 @@ void xinput_task(void) {
     else
       // Otherwise, we combine the opposite axes.
       joystick_states[i] =
-          abs((int16_t)ANALOG_STATE(pos_axis) - ANALOG_STATE(neg_axis));
+          abs((int16_t)ANALOG_STATE(pos_axis) - (int16_t)ANALOG_STATE(neg_axis));
   }
-
+ 
   // Apply the analog curve to joystick states
   for (uint32_t i = 0; i < 2; i++) {
     uint16_t *state = &joystick_states[i * 2];
-
+ 
     uint32_t x = state[0], y = state[1];
     const uint32_t magnitude = usqrt32(x * x + y * y);
     if (magnitude == 0)
       // If magnitude is zero, skip analog curve processing
       continue;
-
+ 
     // Calculate the maximum magnitude for the joystick vector
-    const uint32_t max_x = x > y ? 255 : x * 255 / y;
-    const uint32_t max_y = y > x ? 255 : y * 255 / x;
+    const uint32_t max_x = x > y ? 10000 : x * 10000 / y;
+    const uint32_t max_y = y > x ? 10000 : y * 10000 / x;
     const uint32_t max_magnitude = usqrt32(max_x * max_x + max_y * max_y);
     // Apply the analog curve to the joystick magnitude. The magnitude is
-    // scaled to [0, 255] range.
+    // scaled to [0, 10000] range.
     const uint32_t new_magnitude = apply_analog_curve(
-        magnitude * 255 / max_magnitude, &is_key_end_deadzone);
-
+        magnitude * 10000 / max_magnitude, &is_key_end_deadzone);
+ 
     if (is_key_end_deadzone) {
       // If the joystick is in the key end deadzone, we snap the axes to
       // maximum analog value.
-      x = x == 0 ? 0 : 255;
-      y = y == 0 ? 0 : 255;
+      x = x == 0 ? 0 : 10000;
+      y = y == 0 ? 0 : 10000;
     } else {
       // Otherwise, scale the joystick states to the new magnitude
       // We scale the maximum vector instead of the joystick vector to
       // prevent the analog values from exceeding the maximum range due to
       // approximation errors.
-      x = max_x * new_magnitude / 255;
-      y = max_y * new_magnitude / 255;
+      x = max_x * new_magnitude / 10000;
+      y = max_y * new_magnitude / 10000;
     }
-
+ 
     if (!CURRENT_PROFILE.gamepad_options.square_joystick) {
       // Convert square joystick coordinates to circular coordinates
       state[0] = square_to_circular(x, y);
@@ -220,14 +227,14 @@ void xinput_task(void) {
       state[1] = y;
     }
   }
-
+ 
   // Update joystick states in the report
   for (uint32_t i = 0; i < 4; i++) {
     const uint8_t neg_axis = joystick_axes[i][0];
     const uint8_t pos_axis = joystick_axes[i][1];
-    // Scale range from [0, 255] to [0, 32767]
-    const int16_t joystick_state = joystick_states[i] << 7;
-
+    // Scale range from [0, 10000] to [0, 32767]
+    const int16_t joystick_state = (int16_t)((uint32_t)joystick_states[i] * 32767 / 10000);
+ 
     // Assign signed joystick values to the report
     if (ANALOG_STATE(pos_axis) > ANALOG_STATE(neg_axis))
       // Positive axis
