@@ -63,6 +63,9 @@ typedef struct {
   uint16_t adc_rest_value;
   // ADC value when the key is fully pressed
   uint16_t adc_bottom_out_value;
+  // 1% lenience offset added to adc_rest_value (cached, recomputed only when
+  // rest or bottom-out changes)
+  uint16_t adc_rest_lenience;
 
   // Key travel distance (0-10000)
   uint16_t distance;

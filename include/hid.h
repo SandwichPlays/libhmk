@@ -49,8 +49,9 @@ void hid_keycode_remove(uint8_t keycode);
 /**
  * @brief Send all HID reports
  *
- * This function will block until the device is ready to send the reports.
+ * Non-blocking. Returns true if the keyboard report was sent successfully,
+ * false if the endpoint was busy (caller should retry next scan).
  *
- * @return None
+ * @return true if sent, false if endpoint busy
  */
-void hid_send_reports(void);
+bool hid_send_reports(void);

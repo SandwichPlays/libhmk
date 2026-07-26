@@ -36,6 +36,24 @@ static uint16_t square_to_circular(uint16_t x, uint16_t y) {
   return (uint16_t)((uint32_t)x * usqrt32(val) / 10000);
 }
 
+// Cached scaled analog curve points (x and y) in [0, 10000] range.
+// Rebuilt when the profile's analog_curve changes.
+static uint16_t cached_curve_x[4];
+static uint16_t cached_curve_y[4];
+static uint8_t cached_curve_raw[4][2]; // copy of analog_curve for change detection
+
+/**
+ * @brief Rebuild the cached analog curve from the current profile
+ */
+static void xinput_rebuild_curve_cache(void) {
+  const uint8_t (*curve)[2] = CURRENT_PROFILE.gamepad_options.analog_curve;
+  for (uint32_t i = 0; i < 4; i++) {
+    cached_curve_x[i] = (uint16_t)((uint32_t)curve[i][0] * 10000 / 255);
+    cached_curve_y[i] = (uint16_t)((uint32_t)curve[i][1] * 10000 / 255);
+  }
+  memcpy(cached_curve_raw, curve, sizeof(cached_curve_raw));
+}
+
 /**
  * @brief Apply the analog curve to the analog value
  *
@@ -48,32 +66,29 @@ static uint16_t square_to_circular(uint16_t x, uint16_t y) {
  * @return Processed analog value
  */
 static uint16_t apply_analog_curve(uint16_t value, bool *is_key_end_deadzone) {
-  const uint8_t (*curve)[2] = CURRENT_PROFILE.gamepad_options.analog_curve;
+  // Lazily rebuild cache if profile curve changed
+  if (memcmp(cached_curve_raw, CURRENT_PROFILE.gamepad_options.analog_curve,
+             sizeof(cached_curve_raw)) != 0)
+    xinput_rebuild_curve_cache();
 
-  uint16_t curve_x[4], curve_y[4];
-  for (uint32_t i = 0; i < 4; i++) {
-    curve_x[i] = (uint16_t)((uint32_t)curve[i][0] * 10000 / 255);
-    curve_y[i] = (uint16_t)((uint32_t)curve[i][1] * 10000 / 255);
-  }
-
-  *is_key_end_deadzone = (value > curve_x[3]);
+  *is_key_end_deadzone = (value > cached_curve_x[3]);
   if (*is_key_end_deadzone)
     // Key end deadzone
     return 10000;
 
-  if (value <= curve_x[0])
+  if (value <= cached_curve_x[0])
     // Key start deadzone
     return 0;
 
   // Find the segment in the curve where the value falls
   uint8_t i = 0;
   for (; i < 3; i++) {
-    if (curve_x[i + 1] >= value)
+    if (cached_curve_x[i + 1] >= value)
       break;
   }
 
-  const int32_t x1 = curve_x[i], y1 = curve_y[i];
-  const int32_t x2 = curve_x[i + 1], y2 = curve_y[i + 1];
+  const int32_t x1 = cached_curve_x[i], y1 = cached_curve_y[i];
+  const int32_t x2 = cached_curve_x[i + 1], y2 = cached_curve_y[i + 1];
 
   return (uint16_t)(y1 + (y2 - y1) * ((int32_t)value - x1) / (x2 - x1));
 }
@@ -121,7 +136,10 @@ static uint16_t analog_states[10];
 
 static xinput_report_t report = {.report_size = sizeof(xinput_report_t)};
 
-void xinput_init(void) {}
+// Set to true when any analog state was updated this scan, cleared by xinput_task
+static bool analog_states_dirty = false;
+
+void xinput_init(void) { xinput_rebuild_curve_cache(); }
 
 void xinput_process(uint8_t key) {
   const key_state_t *k = &key_matrix[key];
@@ -146,8 +164,11 @@ void xinput_process(uint8_t key) {
     break;
   }
   case GP_BUTTON_LS_UP ... GP_BUTTON_RT: {
-    // Update the maximum analog value for the analog button
-    ANALOG_STATE(keycode) = M_MAX(ANALOG_STATE(keycode), k->distance);
+    // Only update and mark dirty if the key is actually contributing
+    if (k->distance > 0) {
+      ANALOG_STATE(keycode) = M_MAX(ANALOG_STATE(keycode), k->distance);
+      analog_states_dirty = true;
+    }
     break;
   }
   default: {
@@ -158,6 +179,20 @@ void xinput_process(uint8_t key) {
 
 void xinput_task(void) {
   static xinput_report_t last_report = {.report_size = sizeof(xinput_report_t)};
+
+  // Skip all curve/sqrt math when no analog input changed this scan
+  if (!analog_states_dirty) {
+    // Still need to transmit if the report changed (e.g. digital buttons)
+    if (tud_ready() && endpoint_in != 0 && !usbd_edpt_busy(0, endpoint_in) &&
+        memcmp(&report, &last_report, sizeof(xinput_report_t)) != 0) {
+      usbd_edpt_claim(0, endpoint_in);
+      usbd_edpt_xfer(0, endpoint_in, (uint8_t *)&report, sizeof(xinput_report_t));
+      usbd_edpt_release(0, endpoint_in);
+      memcpy(&last_report, &report, sizeof(xinput_report_t));
+    }
+    return;
+  }
+  analog_states_dirty = false;
 
   bool is_key_end_deadzone = false;
   // Update trigger states in the report

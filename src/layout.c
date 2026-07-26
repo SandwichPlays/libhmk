@@ -139,6 +139,12 @@ void layout_task(void) {
     const key_state_t *k = &key_matrix[i];
     const bool last_key_press = bitmap_get(key_press_states, i);
 
+    // Fast path: skip idle keys with no gamepad mapping entirely.
+    // They have no press/release/hold events and contribute nothing to any report.
+    if (!k->is_pressed && !last_key_press &&
+        CURRENT_PROFILE.gamepad_buttons[i] == GP_BUTTON_NONE)
+      continue;
+
     if ((current_layer == 0) & eeconfig->options.xinput_enabled) {
       // XInput key only applies to layer 0. We process it first since the
       // subsequent key processing may be skipped due to the gamepad options.
@@ -230,8 +236,10 @@ void layout_task(void) {
   }
 
   if (should_send_reports) {
-    hid_send_reports();
-    should_send_reports = false;
+    // Only clear the flag if the report was actually sent.
+    // If the endpoint was busy, we retry on the next scan.
+    if (hid_send_reports())
+      should_send_reports = false;
   }
 
   // Process deferred actions for the next matrix scan

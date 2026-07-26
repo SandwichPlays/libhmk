@@ -43,6 +43,16 @@ matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
                ADC_MAX_VALUE);
 }
 
+// Recompute and store the cached 1% lenience for a key.
+// Must be called whenever adc_rest_value or adc_bottom_out_value changes.
+__attribute__((always_inline)) static inline void
+matrix_update_lenience(uint8_t key) {
+  uint16_t range = (key_matrix[key].adc_bottom_out_value > key_matrix[key].adc_rest_value)
+                   ? (key_matrix[key].adc_bottom_out_value - key_matrix[key].adc_rest_value)
+                   : 0;
+  key_matrix[key].adc_rest_lenience = (uint16_t)(((uint32_t)range * 10) / 1000);
+}
+
 key_state_t key_matrix[NUM_KEYS];
 
 // Bitmap for tracking which keys have Rapid Trigger disabled
@@ -111,10 +121,11 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     EECONFIG_WRITE(calibration, &calib);
   }
 
-  // 5. Update bottom out values using the fresh rest values
+  // 5. Update bottom out values and lenience using the fresh rest values
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     key_matrix[i].adc_bottom_out_value =
         matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+    matrix_update_lenience(i);
   }
 }
 
@@ -199,6 +210,7 @@ void matrix_scan(void) {
           if (!manual_calib_active || manual_calib_status[i] == CALIB_STATE_IDLE) {
             key_matrix[i].adc_bottom_out_value =
                 matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+            matrix_update_lenience(i);
           }
         }
       }
@@ -218,18 +230,15 @@ void matrix_scan(void) {
     } else if (eeconfig->bottom_out_threshold[i] == 0) {
       // Dynamic auto-calibration running only when no static threshold is set
       if (new_adc_filtered >=
-          key_matrix[i].adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON)
+          key_matrix[i].adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON) {
         key_matrix[i].adc_bottom_out_value = new_adc_filtered;
+        matrix_update_lenience(i);
+      }
     }
 
-    uint16_t range = (key_matrix[i].adc_bottom_out_value > key_matrix[i].adc_rest_value)
-                     ? (key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value)
-                     : 0;
-    uint16_t lenience = (uint16_t)(((uint32_t)range * 10) / 1000); // 1.0% lenience
-    uint16_t real_rest_value = key_matrix[i].adc_rest_value + lenience;
-
     key_matrix[i].distance =
-        adc_to_distance(new_adc_filtered, real_rest_value,
+        adc_to_distance(new_adc_filtered,
+                        key_matrix[i].adc_rest_value + key_matrix[i].adc_rest_lenience,
                         key_matrix[i].adc_bottom_out_value);
 
     bool next_pressed = key_matrix[i].is_pressed;

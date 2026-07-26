@@ -195,25 +195,28 @@ void hid_keycode_remove(uint8_t keycode) {
   }
 }
 
-void hid_send_reports(void) {
+bool hid_send_reports(void) {
 #if !defined(HID_DISABLED)
-  if (tud_suspended())
+  if (tud_suspended()) {
     // Wake up the host if it's suspended
     tud_remote_wakeup();
+    return false;
+  }
 
-  while (!tud_hid_n_ready(USB_ITF_KEYBOARD))
-    // Wait for the keyboard interface to be ready
-    tud_task();
+  if (!tud_hid_n_ready(USB_ITF_KEYBOARD))
+    // Keyboard endpoint busy, caller should retry next scan
+    return false;
 
   hid_send_keyboard_report();
 
-  while (!tud_hid_n_ready(USB_ITF_HID))
-    // Wait for the HID interface to be ready
-    tud_task();
+  if (!tud_hid_n_ready(USB_ITF_HID))
+    // HID endpoint busy, will be retried via report_complete_cb chain
+    return true;
 
   // Start from the first report ID
   hid_send_hid_report(REPORT_ID_SYSTEM_CONTROL);
 #endif
+  return true;
 }
 
 //--------------------------------------------------------------------+
