@@ -122,7 +122,9 @@ adc_to_distance(uint16_t adc, uint16_t adc_rest_value,
   // Handle edge cases. This is necessary since we no longer update the rest
   // value during the runtime and the bottom-out value can be lower than the
   // ADC value if their difference is less than the calibration epsilon.
-  if ((adc <= adc_rest_value) | (adc_rest_value >= adc_bottom_out_value))
+  if (adc <= adc_rest_value)
+    return 0;
+  if (adc_rest_value >= adc_bottom_out_value)
     return 0;
   if (adc >= adc_bottom_out_value)
     return 10000;

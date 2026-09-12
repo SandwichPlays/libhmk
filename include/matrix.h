@@ -136,6 +136,21 @@ void matrix_finish_manual_calibration(bool save);
 uint8_t matrix_get_calibration_status(uint8_t key);
 
 /**
+ * @brief Update cached calibration data (e.g. switch travel hysteresis)
+ *
+ * @return None
+ */
+void matrix_update_calibration(void);
+
+/**
+ * @brief Check if a key has inverted polarity (North-facing magnet)
+ *
+ * @param key Key index
+ * @return true if inverted, false otherwise
+ */
+bool matrix_is_key_inverted(uint8_t key);
+
+/**
  * @brief Update the key matrix to reflect the current state of the keys
  *
  * @return None

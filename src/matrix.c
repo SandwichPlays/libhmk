@@ -20,27 +20,42 @@
 #include "hardware/hardware.h"
 #include "lib/bitmap.h"
 
-// Exponential moving average (EMA) filter
+// Exponential moving average (EMA) filter with symmetric half-step rounding
 #define EMA(x, y)                                                              \
   (((uint32_t)(x) +                                                            \
-    ((uint32_t)(y) * ((1 << MATRIX_EMA_ALPHA_EXPONENT) - 1))) >>               \
+    ((uint32_t)(y) * ((1 << MATRIX_EMA_ALPHA_EXPONENT) - 1)) +                 \
+    (1 << (MATRIX_EMA_ALPHA_EXPONENT - 1))) >>                                 \
    MATRIX_EMA_ALPHA_EXPONENT)
+
+// Bitmap for tracking which keys have inverted polarity (North-facing magnet)
+static bitmap_t key_inverted[] = MAKE_BITMAP(NUM_KEYS);
+
+bool matrix_is_key_inverted(uint8_t key) {
+  if (key < NUM_KEYS)
+    return bitmap_get(key_inverted, key);
+  return false;
+}
 
 __attribute__((always_inline)) static inline uint16_t
 matrix_analog_read(uint8_t key) {
+  uint16_t val = analog_read(key);
+  if (bitmap_get(key_inverted, key)) {
+    val = ADC_MAX_VALUE - val;
+  }
 #if defined(MATRIX_INVERT_ADC_VALUES)
-  return ADC_MAX_VALUE - analog_read(key);
-#else
-  return analog_read(key);
+  val = ADC_MAX_VALUE - val;
 #endif
+  return val;
 }
 
 __attribute__((always_inline)) static inline uint16_t
 matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
+  uint16_t threshold =
+      eeconfig->bottom_out_threshold[key] & BOTTOM_OUT_THRESHOLD_MASK;
   return M_MIN(rest_value +
                    M_MAX(eeconfig->calibration.initial_bottom_out_threshold,
-                         eeconfig->bottom_out_threshold[key]),
-               ADC_MAX_VALUE);
+                         threshold),
+                ADC_MAX_VALUE);
 }
 
 // Recompute and store the cached 1% lenience for a key.
@@ -50,7 +65,7 @@ matrix_update_lenience(uint8_t key) {
   uint16_t range = (key_matrix[key].adc_bottom_out_value > key_matrix[key].adc_rest_value)
                    ? (key_matrix[key].adc_bottom_out_value - key_matrix[key].adc_rest_value)
                    : 0;
-  key_matrix[key].adc_rest_lenience = (uint16_t)(((uint32_t)range * 10) / 1000);
+  key_matrix[key].adc_rest_lenience = (uint16_t)(range / 100);
 }
 
 key_state_t key_matrix[NUM_KEYS];
@@ -60,10 +75,23 @@ static bitmap_t rapid_trigger_disabled[] = MAKE_BITMAP(NUM_KEYS);
 
 static bool manual_calib_active = false;
 static uint8_t manual_calib_status[NUM_KEYS] = {0};
+static uint8_t manual_calib_dir[NUM_KEYS] = {0};
 static uint16_t manual_calib_peak[NUM_KEYS] = {0};
 
 static uint32_t stable_timer[NUM_KEYS] = {0};
-static uint16_t prev_raw[NUM_KEYS] = {0};
+static uint16_t hyst_gap[NUM_KEYS] = {0};
+static uint16_t raw_boot_rest[NUM_KEYS] = {0};
+
+void matrix_update_calibration(void) {
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    uint8_t travel_tenths = eeconfig->calibration.switch_travel[i];
+    if (travel_tenths < 20 || travel_tenths > 50) {
+      travel_tenths = 36;
+    }
+    uint16_t gap = (uint16_t)(5000 / travel_tenths);
+    hyst_gap[i] = (gap < 50) ? 139 : gap;
+  }
+}
 
 void matrix_init(void) { matrix_recalibrate(false); }
 
@@ -71,6 +99,13 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   if (reset_bottom_out_threshold) {
     uint16_t bottom_out_threshold[NUM_KEYS] = {0};
     EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
+  }
+
+  // Load saved polarity from bottom_out_threshold bit 15
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    bool inv =
+        (eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_POLARITY_INVERTED) != 0;
+    bitmap_set(key_inverted, i, inv);
   }
 
   // 1. Flush EMA filter and sample live ADC readings
@@ -83,13 +118,13 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
 
   // 2. Initialize rest values to current live ADC readings
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    raw_boot_rest[i] = analog_read(i);
     key_matrix[i].adc_rest_value = key_matrix[i].adc_filtered;
     key_matrix[i].distance = 0;
     key_matrix[i].extremum = 0;
     key_matrix[i].key_dir = KEY_DIR_INACTIVE;
     key_matrix[i].is_pressed = false;
     stable_timer[i] = timer_read();
-    prev_raw[i] = key_matrix[i].adc_filtered;
   }
 
   // 3. Track resting noise during calibration duration
@@ -127,6 +162,9 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
         matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
     matrix_update_lenience(i);
   }
+
+  // 6. Update cached hysteresis gap
+  matrix_update_calibration();
 }
 
 void matrix_start_manual_calibration(const uint8_t *keys, uint8_t count) {
@@ -144,9 +182,11 @@ void matrix_start_manual_calibration(const uint8_t *keys, uint8_t count) {
     }
     if (target) {
       manual_calib_status[i] = CALIB_STATE_WAITING;
+      manual_calib_dir[i] = 0;
       manual_calib_peak[i] = key_matrix[i].adc_rest_value;
     } else {
       manual_calib_status[i] = CALIB_STATE_IDLE;
+      manual_calib_dir[i] = 0;
     }
   }
 }
@@ -162,8 +202,11 @@ void matrix_finish_manual_calibration(bool save) {
           manual_calib_status[i] == CALIB_STATE_RECORDING) {
         if (manual_calib_peak[i] > key_matrix[i].adc_rest_value + 50) {
           uint16_t delta = manual_calib_peak[i] - key_matrix[i].adc_rest_value;
+          if (bitmap_get(key_inverted, i)) {
+            delta |= BOTTOM_OUT_POLARITY_INVERTED;
+          }
           bottom_out_threshold[i] = delta;
-          delta_sum += delta;
+          delta_sum += (delta & BOTTOM_OUT_THRESHOLD_MASK);
           delta_count++;
         }
       }
@@ -179,6 +222,7 @@ void matrix_finish_manual_calibration(bool save) {
   manual_calib_active = false;
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     manual_calib_status[i] = CALIB_STATE_IDLE;
+    manual_calib_dir[i] = 0;
   }
 }
 
@@ -189,25 +233,61 @@ uint8_t matrix_get_calibration_status(uint8_t key) {
 }
 
 void matrix_scan(void) {
+  const uint32_t now = timer_read();
+  const uint32_t debounce_time = eeconfig->options.debounce_ms;
+
   // Only scan keys that are connected to analog inputs
   for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS; i++) {
-    const uint16_t raw_val = matrix_analog_read(i);
+    const uint16_t raw_current = analog_read(i);
+
+    // Dynamic polarity auto-detection for uncalibrated keys
+    if ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_THRESHOLD_MASK) == 0 &&
+        !manual_calib_active) {
+      if (!bitmap_get(key_inverted, i)) {
+        if (raw_current + 40 < raw_boot_rest[i]) {
+          bitmap_set(key_inverted, i, true);
+          key_matrix[i].adc_rest_value = ADC_MAX_VALUE - raw_boot_rest[i];
+          key_matrix[i].adc_filtered = ADC_MAX_VALUE - raw_current;
+          key_matrix[i].adc_bottom_out_value =
+              matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+          matrix_update_lenience(i);
+        }
+      } else {
+        if (raw_current > raw_boot_rest[i] + 40) {
+          bitmap_set(key_inverted, i, false);
+          key_matrix[i].adc_rest_value = raw_boot_rest[i];
+          key_matrix[i].adc_filtered = raw_current;
+          key_matrix[i].adc_bottom_out_value =
+              matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+          matrix_update_lenience(i);
+        }
+      }
+    }
+
+    uint16_t raw_val = raw_current;
+    if (bitmap_get(key_inverted, i)) {
+      raw_val = ADC_MAX_VALUE - raw_val;
+    }
+#if defined(MATRIX_INVERT_ADC_VALUES)
+    raw_val = ADC_MAX_VALUE - raw_val;
+#endif
     const uint16_t prev_filtered = key_matrix[i].adc_filtered;
-    const uint16_t new_adc_filtered =
-        EMA(raw_val, prev_filtered);
     const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
 
+    uint16_t new_adc_filtered = EMA(raw_val, prev_filtered);
     key_matrix[i].adc_filtered = new_adc_filtered;
 
-    // Stability baseline tracking (using filtered value to absorb noise, 15ms timer for fast tapping)
+    // Stability baseline tracking (only when key is completely released and idle)
     int32_t diff = (int32_t)new_adc_filtered - (int32_t)prev_filtered;
     if (diff < -3 || diff > 3) {
-      stable_timer[i] = timer_read();
+      stable_timer[i] = now;
     } else {
-      if (timer_elapsed(stable_timer[i]) >= 15) {
-        if (new_adc_filtered < key_matrix[i].adc_rest_value) {
+      if (now - stable_timer[i] >= 15) {
+        if (!key_matrix[i].is_pressed && key_matrix[i].distance == 0 &&
+            !manual_calib_active &&
+            new_adc_filtered < key_matrix[i].adc_rest_value) {
           key_matrix[i].adc_rest_value = new_adc_filtered;
-          if (!manual_calib_active || manual_calib_status[i] == CALIB_STATE_IDLE) {
+          if (manual_calib_status[i] == CALIB_STATE_IDLE) {
             key_matrix[i].adc_bottom_out_value =
                 matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
             matrix_update_lenience(i);
@@ -217,17 +297,35 @@ void matrix_scan(void) {
     }
 
     if (manual_calib_active && manual_calib_status[i] != CALIB_STATE_IDLE) {
-      if (new_adc_filtered > key_matrix[i].adc_rest_value + 60) {
-        manual_calib_status[i] = CALIB_STATE_RECORDING;
+      if (manual_calib_status[i] == CALIB_STATE_WAITING) {
+        if (new_adc_filtered > key_matrix[i].adc_rest_value + 60) {
+          manual_calib_status[i] = CALIB_STATE_RECORDING;
+          manual_calib_peak[i] = new_adc_filtered;
+        } else if (new_adc_filtered + 60 < key_matrix[i].adc_rest_value) {
+          // North-facing switch detected: invert immediately on initial press!
+          bitmap_set(key_inverted, i, !bitmap_get(key_inverted, i));
+          uint16_t old_rest = key_matrix[i].adc_rest_value;
+          uint16_t old_val = new_adc_filtered;
+          key_matrix[i].adc_rest_value = ADC_MAX_VALUE - old_rest;
+          key_matrix[i].adc_filtered = ADC_MAX_VALUE - old_val;
+          new_adc_filtered = key_matrix[i].adc_filtered;
+          key_matrix[i].adc_bottom_out_value = new_adc_filtered;
+          manual_calib_peak[i] = new_adc_filtered;
+          matrix_update_lenience(i);
+          manual_calib_status[i] = CALIB_STATE_RECORDING;
+        }
+      } else if (manual_calib_status[i] == CALIB_STATE_RECORDING) {
         if (new_adc_filtered > manual_calib_peak[i]) {
           manual_calib_peak[i] = new_adc_filtered;
+          key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
+          matrix_update_lenience(i);
+        } else if (new_adc_filtered <= key_matrix[i].adc_rest_value + 30) {
+          manual_calib_status[i] = CALIB_STATE_COMPLETED;
+          key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
+          matrix_update_lenience(i);
         }
-      } else if (manual_calib_status[i] == CALIB_STATE_RECORDING &&
-                 new_adc_filtered <= key_matrix[i].adc_rest_value + 30) {
-        manual_calib_status[i] = CALIB_STATE_COMPLETED;
-        key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
       }
-    } else if (eeconfig->bottom_out_threshold[i] == 0) {
+    } else if ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_THRESHOLD_MASK) == 0) {
       // Dynamic auto-calibration running only when no static threshold is set
       if (new_adc_filtered >=
           key_matrix[i].adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON) {
@@ -236,77 +334,105 @@ void matrix_scan(void) {
       }
     }
 
-    key_matrix[i].distance =
+    const uint16_t gap = hyst_gap[i];
+    const uint16_t raw_dist =
         adc_to_distance(new_adc_filtered,
                         key_matrix[i].adc_rest_value + key_matrix[i].adc_rest_lenience,
                         key_matrix[i].adc_bottom_out_value);
+    // Suppress tiny ±0.006mm (gap >> 3) jitter when holding key stationary
+    uint16_t dist = key_matrix[i].distance;
+    if (raw_dist == 0 || raw_dist == 10000 ||
+        abs((int32_t)raw_dist - (int32_t)dist) > (gap >> 3)) {
+      dist = raw_dist;
+      key_matrix[i].distance = dist;
+    }
+
+    const uint16_t deact_point = (actuation->actuation_point > gap)
+                                ? (actuation->actuation_point - gap)
+                                : 0;
 
     bool next_pressed = key_matrix[i].is_pressed;
 
-    if (bitmap_get(rapid_trigger_disabled, i) | (actuation->rt_down == 0)) {
+    if (bitmap_get(rapid_trigger_disabled, i) || (actuation->rt_down == 0)) {
       key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-      next_pressed = (key_matrix[i].distance >= actuation->actuation_point);
+      if (key_matrix[i].is_pressed) {
+        if (dist <= deact_point) {
+          next_pressed = false;
+        }
+      } else {
+        if (dist >= actuation->actuation_point) {
+          next_pressed = true;
+        }
+      }
     } else {
-      const uint16_t dist = key_matrix[i].distance;
       const uint16_t top_dz = actuation->rt_deadzone_top;
       const uint16_t bot_dz = actuation->rt_deadzone_bottom;
       const uint16_t bot_limit = (bot_dz < 10000) ? (10000 - bot_dz) : 10000;
 
       if (dist <= top_dz) {
         key_matrix[i].extremum = dist;
-        key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-        next_pressed = false;
+        if (!key_matrix[i].is_pressed || dist <= deact_point) {
+          key_matrix[i].key_dir = KEY_DIR_INACTIVE;
+          next_pressed = false;
+        }
       } else if (dist >= bot_limit) {
         key_matrix[i].extremum = dist;
         key_matrix[i].key_dir = KEY_DIR_DOWN;
         next_pressed = true;
       } else {
         const uint16_t reset_point =
-            actuation->continuous ? 0 : actuation->actuation_point;
+            (actuation->continuous && top_dz < deact_point) ? top_dz : deact_point;
         const uint16_t rt_up =
             actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
+        const uint16_t rt_active_min =
+            (actuation->actuation_point + gap < 10000)
+                ? (actuation->actuation_point + gap)
+                : 10000;
 
         switch (key_matrix[i].key_dir) {
         case KEY_DIR_INACTIVE:
-          if (key_matrix[i].distance > actuation->actuation_point) {
+          if (dist >= actuation->actuation_point) {
             // Pressed down past actuation point
-            key_matrix[i].extremum = key_matrix[i].distance;
+            key_matrix[i].extremum = dist;
             key_matrix[i].key_dir = KEY_DIR_DOWN;
             next_pressed = true;
           }
           break;
 
         case KEY_DIR_DOWN:
-          if (key_matrix[i].distance <= reset_point) {
-            // Released past reset point
-            key_matrix[i].extremum = key_matrix[i].distance;
+          if (dist <= deact_point) {
+            // Released past deactuation point (hysteresis)
+            key_matrix[i].extremum = dist;
             key_matrix[i].key_dir = KEY_DIR_INACTIVE;
             next_pressed = false;
-          } else if (key_matrix[i].distance + rt_up < key_matrix[i].extremum) {
-            // Released by Rapid Trigger
-            key_matrix[i].extremum = key_matrix[i].distance;
+          } else if (key_matrix[i].extremum >= rt_active_min &&
+                     dist + rt_up < key_matrix[i].extremum) {
+            // Released by Rapid Trigger (only once pressed past actuation + hyst_gap)
+            key_matrix[i].extremum = dist;
             key_matrix[i].key_dir = KEY_DIR_UP;
             next_pressed = false;
-          } else if (key_matrix[i].distance > key_matrix[i].extremum)
+          } else if (dist > key_matrix[i].extremum) {
             // Pressed down further
-            key_matrix[i].extremum = key_matrix[i].distance;
+            key_matrix[i].extremum = dist;
+          }
           break;
 
         case KEY_DIR_UP:
-          if (key_matrix[i].distance <= reset_point) {
-            // Released past reset point
-            key_matrix[i].extremum = key_matrix[i].distance;
+          if (dist <= reset_point) {
+            // Released past reset/deactuation point
+            key_matrix[i].extremum = dist;
             key_matrix[i].key_dir = KEY_DIR_INACTIVE;
             next_pressed = false;
-          } else if (key_matrix[i].extremum + actuation->rt_down <
-                     key_matrix[i].distance) {
-            // Pressed by Rapid Trigger
-            key_matrix[i].extremum = key_matrix[i].distance;
+          } else if (key_matrix[i].extremum + actuation->rt_down < dist &&
+                     (actuation->continuous || dist >= actuation->actuation_point)) {
+            // Re-pressed by Rapid Trigger
+            key_matrix[i].extremum = dist;
             key_matrix[i].key_dir = KEY_DIR_DOWN;
             next_pressed = true;
-          } else if (key_matrix[i].distance < key_matrix[i].extremum)
+          } else if (dist < key_matrix[i].extremum) {
             // Released further
-            key_matrix[i].extremum = key_matrix[i].distance;
+            key_matrix[i].extremum = dist;
+          }
           break;
 
         default:
@@ -315,12 +441,11 @@ void matrix_scan(void) {
       }
     }
 
-    // 0ms Latency Lockout Debounce: Instant key actuation on frame 0, 
-    // with 2ms lockout window against electrical noise chatter.
+    // Lockout Debounce
     if (next_pressed != key_matrix[i].is_pressed) {
-      if (timer_elapsed(key_matrix[i].last_state_change_time) >= eeconfig->options.debounce_ms) {
+      if (now - key_matrix[i].last_state_change_time >= debounce_time) {
         key_matrix[i].is_pressed = next_pressed;
-        key_matrix[i].last_state_change_time = timer_read();
+        key_matrix[i].last_state_change_time = now;
       }
     }
   }

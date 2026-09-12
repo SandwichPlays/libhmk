@@ -178,6 +178,9 @@ void xinput_process(uint8_t key) {
 }
 
 void xinput_task(void) {
+  if (!eeconfig->options.xinput_enabled)
+    return;
+
   static xinput_report_t last_report = {.report_size = sizeof(xinput_report_t)};
 
   // Skip all curve/sqrt math when no analog input changed this scan

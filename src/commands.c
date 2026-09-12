@@ -92,6 +92,9 @@ void command_process(const uint8_t *buf) {
   }
   case COMMAND_SET_CALIBRATION: {
     success = EECONFIG_WRITE(calibration, &in->calibration);
+    if (success) {
+      matrix_update_calibration();
+    }
     break;
   }
   case COMMAND_GET_PROFILE: {
@@ -164,11 +167,16 @@ void command_process(const uint8_t *buf) {
     uint16_t bottom_out_threshold[NUM_KEYS];
 
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
-      if (key_matrix[i].adc_bottom_out_value < key_matrix[i].adc_rest_value)
+      if (key_matrix[i].adc_bottom_out_value < key_matrix[i].adc_rest_value) {
         bottom_out_threshold[i] = 0;
-      else
-        bottom_out_threshold[i] =
+      } else {
+        uint16_t delta =
             key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value;
+        if (matrix_is_key_inverted(i)) {
+          delta |= BOTTOM_OUT_POLARITY_INVERTED;
+        }
+        bottom_out_threshold[i] = delta;
+      }
     }
     success = EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
     break;

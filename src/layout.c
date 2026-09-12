@@ -133,19 +133,20 @@ void layout_task(void) {
   static uint32_t last_ak_tick = 0;
 
   const uint8_t current_layer = layout_get_current_layer();
+  const bool xinput_active = (current_layer == 0) && eeconfig->options.xinput_enabled;
   bool has_non_tap_hold_press = false;
 
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     const key_state_t *k = &key_matrix[i];
     const bool last_key_press = bitmap_get(key_press_states, i);
 
-    // Fast path: skip idle keys with no gamepad mapping entirely.
-    // They have no press/release/hold events and contribute nothing to any report.
+    // Fast path: skip idle keys entirely.
+    // When XInput is off (or key has no gamepad mapping), released keys contribute nothing.
     if (!k->is_pressed && !last_key_press &&
-        CURRENT_PROFILE.gamepad_buttons[i] == GP_BUTTON_NONE)
+        (!xinput_active || CURRENT_PROFILE.gamepad_buttons[i] == GP_BUTTON_NONE))
       continue;
 
-    if ((current_layer == 0) & eeconfig->options.xinput_enabled) {
+    if (xinput_active) {
       // XInput key only applies to layer 0. We process it first since the
       // subsequent key processing may be skipped due to the gamepad options.
       if (CURRENT_PROFILE.gamepad_buttons[i] != GP_BUTTON_NONE) {
@@ -163,11 +164,11 @@ void layout_task(void) {
         continue;
     }
 
-    if ((current_layer == 0) & bitmap_get(key_disabled, i))
+    if ((current_layer == 0) && bitmap_get(key_disabled, i))
       // Only keys in layer 0 can be disabled.
       continue;
 
-    if (k->is_pressed & !last_key_press) {
+    if (k->is_pressed && !last_key_press) {
       // Key press event
       const uint8_t keycode = layout_get_keycode(current_layer, i);
       const uint8_t ak_index = advanced_key_indices[current_layer][i];
@@ -189,7 +190,7 @@ void layout_task(void) {
         layout_register(i, keycode);
         has_non_tap_hold_press |= (keycode != KC_NO);
       }
-    } else if (!k->is_pressed & last_key_press) {
+    } else if (!k->is_pressed && last_key_press) {
       // Key release event
       const uint8_t keycode = active_keycodes[i];
       const uint8_t ak_index = active_advanced_keys[i];
