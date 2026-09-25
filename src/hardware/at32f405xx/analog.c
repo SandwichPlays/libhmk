@@ -109,7 +109,11 @@ void analog_init(void) {
   adc_reset(ADC1);
   adc_base_default_para_init(&adc_base_struct);
   adc_base_struct.sequence_mode = TRUE;
+#if ADC_NUM_MUX_INPUTS > 0
   adc_base_struct.repeat_mode = FALSE;
+#else
+  adc_base_struct.repeat_mode = TRUE;
+#endif
   adc_base_struct.data_align = ADC_RIGHT_ALIGNMENT;
   adc_base_struct.ordinary_channel_length =
       ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS;
@@ -267,6 +271,9 @@ void DMA1_Channel1_IRQHandler(void) {
     // We initialize all the ADC values when we have gone through all the
     // multiplexer input channels.
     adc_initialized |= (current_mux_channel == 0);
+    if (current_mux_channel == 0) {
+      analog_sweep_count++;
+    }
 
     // Set the multiplexer select pins
     for (uint32_t i = 0; i < ADC_NUM_MUX_SELECT_PINS; i++)
@@ -276,11 +283,9 @@ void DMA1_Channel1_IRQHandler(void) {
     // Delay to allow the multiplexer outputs to settle
     tmr_counter_enable(TMR6, TRUE);
 #else
-    // We initialize all the ADC values when we have read all the raw input.
+    // In continuous repeat_mode, conversions loop automatically in hardware
     adc_initialized = true;
     analog_sweep_count++;
-    // Immediately start the next conversion
-    adc_ordinary_software_trigger_enable(ADC1, TRUE);
 #endif
   }
 }
