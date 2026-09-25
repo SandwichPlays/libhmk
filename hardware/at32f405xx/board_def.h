@@ -20,8 +20,8 @@
 //--------------------------------------------------------------------+
 
 #if !defined(ADC_NUM_SAMPLE_CYCLES)
-// Number of sample cycles for each ADC conversion (~360kHz sweep rate with 4 keys)
-#define ADC_NUM_SAMPLE_CYCLES ADC_SAMPLETIME_7_5
+// Number of sample cycles for each ADC conversion (~30kHz sweep rate with 4 keys and 16x oversample)
+#define ADC_NUM_SAMPLE_CYCLES ADC_SAMPLETIME_1_5
 #endif
 
 #if !defined(ADC_OVERSAMPLE_RATIO)
