@@ -115,6 +115,12 @@ void analog_init(void) {
       ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS;
   adc_base_config(ADC1, &adc_base_struct);
 
+#if defined(ADC_OVERSAMPLE_RATIO) && defined(ADC_OVERSAMPLE_SHIFT)
+  adc_oversample_ratio_shift_set(ADC1, ADC_OVERSAMPLE_RATIO,
+                                 ADC_OVERSAMPLE_SHIFT);
+  adc_ordinary_oversample_enable(ADC1, TRUE);
+#endif
+
 #if ADC_NUM_MUX_INPUTS > 0
   // Initialize the multiplexer input channels
   for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS; i++) {
