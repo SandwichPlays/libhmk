@@ -160,6 +160,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
 
   // 5. Update bottom out values and lenience using the fresh rest values
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    raw_boot_rest[i] = analog_read(i);
     key_matrix[i].adc_bottom_out_value =
         matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
     matrix_update_lenience(i);
@@ -247,7 +248,7 @@ void matrix_scan(void) {
     if ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_THRESHOLD_MASK) == 0 &&
         !manual_calib_active) {
       if (!bitmap_get(key_inverted, i)) {
-        if (raw_current + 40 < raw_boot_rest[i]) {
+        if (raw_current + 150 < raw_boot_rest[i]) {
           bitmap_set(key_inverted, i, true);
           key_matrix[i].adc_rest_value = ADC_MAX_VALUE - raw_boot_rest[i];
           key_matrix[i].adc_filtered = ADC_MAX_VALUE - raw_current;
@@ -256,7 +257,7 @@ void matrix_scan(void) {
           matrix_update_lenience(i);
         }
       } else {
-        if (raw_current > raw_boot_rest[i] + 40) {
+        if (raw_current > raw_boot_rest[i] + 150) {
           bitmap_set(key_inverted, i, false);
           key_matrix[i].adc_rest_value = raw_boot_rest[i];
           key_matrix[i].adc_filtered = raw_current;
