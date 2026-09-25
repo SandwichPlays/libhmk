@@ -28,10 +28,8 @@
 
 #if !defined(MATRIX_EMA_ALPHA_EXPONENT)
 // Exponent of the alpha parameter of the exponential moving average (EMA)
-// filter used to smooth the ADC values. Higher values will result in smoother
-// but slower changes in the filtered ADC values. The alpha parameter is used in
-// the formula: y_n = alpha * x_n + (1 - alpha) * y_{n-1}
-#define MATRIX_EMA_ALPHA_EXPONENT 4
+// filter used to smooth the ADC values. Set to 0 to bypass EMA completely.
+#define MATRIX_EMA_ALPHA_EXPONENT 2
 #endif
 
 #if !defined(MATRIX_CALIBRATION_EPSILON)
@@ -43,6 +41,11 @@
 #if !defined(MATRIX_DEBOUNCE_MS)
 // Lockout debounce duration in milliseconds to prevent double-clicking/chatter
 #define MATRIX_DEBOUNCE_MS 2
+#endif
+
+#if !defined(MATRIX_REST_LENIENCE)
+// Fixed ADC count offset added to adc_rest_value to guard against resting noise
+#define MATRIX_REST_LENIENCE 2
 #endif
 
 //--------------------------------------------------------------------+
@@ -63,6 +66,9 @@ typedef struct {
   uint16_t adc_rest_value;
   // ADC value when the key is fully pressed
   uint16_t adc_bottom_out_value;
+  // Fixed lenience offset added to adc_rest_value (cached, recomputed only when
+  // rest or bottom-out changes)
+  uint16_t adc_rest_lenience;
 
   // Key travel distance (0-10000)
   uint16_t distance;
@@ -133,6 +139,21 @@ void matrix_finish_manual_calibration(bool save);
 uint8_t matrix_get_calibration_status(uint8_t key);
 
 /**
+ * @brief Update cached calibration data (e.g. switch travel hysteresis)
+ *
+ * @return None
+ */
+void matrix_update_calibration(void);
+
+/**
+ * @brief Check if a key has inverted polarity (North-facing magnet)
+ *
+ * @param key Key index
+ * @return true if inverted, false otherwise
+ */
+bool matrix_is_key_inverted(uint8_t key);
+
+/**
  * @brief Update the key matrix to reflect the current state of the keys
  *
  * @return None
@@ -158,3 +179,10 @@ void matrix_disable_rapid_trigger(uint8_t key, bool disable);
  * @return None
  */
 void matrix_trigger_virtual_key(uint8_t key, bool is_pressed);
+
+/**
+ * @brief Check if any key press state has changed since the last check
+ *
+ * @return True if a key state changed, false otherwise
+ */
+bool matrix_has_changed(void);

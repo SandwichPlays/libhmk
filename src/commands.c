@@ -70,9 +70,14 @@ void command_process(const uint8_t *buf) {
 
     for (uint32_t i = 0;
          i < M_ARRAY_SIZE(out->analog_info) && i + p->offset < NUM_KEYS; i++) {
-      o[i].adc_value = key_matrix[i + p->offset].adc_filtered;
-      o[i].distance = key_matrix[i + p->offset].distance;
-      o[i].status = matrix_get_calibration_status(i + p->offset);
+      const uint8_t key_idx = i + p->offset;
+      o[i].adc_value = key_matrix[key_idx].adc_filtered;
+      o[i].distance = key_matrix[key_idx].distance;
+      uint8_t status = matrix_get_calibration_status(key_idx);
+      if (key_matrix[key_idx].is_pressed) {
+        status |= 0x80;
+      }
+      o[i].status = status;
     }
     break;
   }
@@ -92,6 +97,9 @@ void command_process(const uint8_t *buf) {
   }
   case COMMAND_SET_CALIBRATION: {
     success = EECONFIG_WRITE(calibration, &in->calibration);
+    if (success) {
+      matrix_update_calibration();
+    }
     break;
   }
   case COMMAND_GET_PROFILE: {
@@ -164,11 +172,16 @@ void command_process(const uint8_t *buf) {
     uint16_t bottom_out_threshold[NUM_KEYS];
 
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
-      if (key_matrix[i].adc_bottom_out_value < key_matrix[i].adc_rest_value)
+      if (key_matrix[i].adc_bottom_out_value < key_matrix[i].adc_rest_value) {
         bottom_out_threshold[i] = 0;
-      else
-        bottom_out_threshold[i] =
+      } else {
+        uint16_t delta =
             key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value;
+        if (matrix_is_key_inverted(i)) {
+          delta |= BOTTOM_OUT_POLARITY_INVERTED;
+        }
+        bottom_out_threshold[i] = delta;
+      }
     }
     success = EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
     break;

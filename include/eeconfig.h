@@ -27,6 +27,10 @@
 // Magic number to identify the end of the configuration
 #define EECONFIG_MAGIC_END 0x0A4B4D48
 
+// Bit 15 of bottom_out_threshold indicates inverted polarity (North-facing magnet)
+#define BOTTOM_OUT_POLARITY_INVERTED 0x8000
+#define BOTTOM_OUT_THRESHOLD_MASK    0x7FFF
+
 // Keyboard calibration configuration
 typedef struct __attribute__((packed)) {
   // Initial rest value of the key matrix. If the value is smaller than the
@@ -142,7 +146,7 @@ extern const eeconfig_t *eeconfig;
 
 #if !defined(DEFAULT_ACTUATION_POINT)
 // Default actuation point
-#define DEFAULT_ACTUATION_POINT 128
+#define DEFAULT_ACTUATION_POINT 5000
 #endif
 
 #if !defined(DEFAULT_GAMEPAD_OPTIONS)

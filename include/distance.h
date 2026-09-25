@@ -108,8 +108,6 @@ _Static_assert(M_ARRAY_SIZE(distance_lut) == DISTANCE_LUT_SIZE,
 /**
  * @brief Convert ADC value to distance in the range [0, 10000]
  *
- * This function assumes that the following invariant holds:
- *
  * @param adc ADC value
  * @param adc_rest_value ADC value when the key is fully released
  * @param adc_bottom_out_value ADC value when the key is fully pressed
@@ -119,18 +117,25 @@ _Static_assert(M_ARRAY_SIZE(distance_lut) == DISTANCE_LUT_SIZE,
 __attribute__((always_inline)) static inline uint16_t
 adc_to_distance(uint16_t adc, uint16_t adc_rest_value,
                 uint16_t adc_bottom_out_value) {
-  // Handle edge cases. This is necessary since we no longer update the rest
-  // value during the runtime and the bottom-out value can be lower than the
-  // ADC value if their difference is less than the calibration epsilon.
-  if ((adc <= adc_rest_value) | (adc_rest_value >= adc_bottom_out_value))
+  if (adc <= adc_rest_value)
+    return 0;
+  if (adc_rest_value >= adc_bottom_out_value)
     return 0;
   if (adc >= adc_bottom_out_value)
     return 10000;
 
-  // Normalize ADC value to the range [0, LUT_SIZE - 1]
-  const uint32_t normalized = (uint32_t)(adc - adc_rest_value) *
-                              (uint32_t)(DISTANCE_LUT_SIZE - 1) /
-                              (uint32_t)(adc_bottom_out_value - adc_rest_value);
+  const uint32_t range = (uint32_t)(adc_bottom_out_value - adc_rest_value);
+  const uint32_t scaled = (uint32_t)(adc - adc_rest_value) *
+                          ((uint32_t)(DISTANCE_LUT_SIZE - 1) << 8) / range;
 
-  return distance_lut[normalized];
+  const uint32_t idx = scaled >> 8;
+  const uint32_t frac = scaled & 0xFF;
+
+  if (idx >= DISTANCE_LUT_SIZE - 1)
+    return distance_lut[DISTANCE_LUT_SIZE - 1];
+
+  const uint32_t d0 = distance_lut[idx];
+  const uint32_t d1 = distance_lut[idx + 1];
+
+  return (uint16_t)(d0 + (((d1 - d0) * frac) >> 8));
 }
