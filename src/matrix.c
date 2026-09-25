@@ -20,12 +20,14 @@
 #include "hardware/hardware.h"
 #include "lib/bitmap.h"
 
-// Exponential moving average (EMA) filter
+// Exponential moving average (EMA) filter with symmetric half-step rounding
 #define EMA(x, y)                                                              \
   (((uint32_t)(x) +                                                            \
-    ((uint32_t)(y) * ((1 << MATRIX_EMA_ALPHA_EXPONENT) - 1))) >>               \
+    ((uint32_t)(y) * ((1 << MATRIX_EMA_ALPHA_EXPONENT) - 1)) +                 \
+    (1 << (MATRIX_EMA_ALPHA_EXPONENT - 1))) >>                                 \
    MATRIX_EMA_ALPHA_EXPONENT)
 
+// Bitmap for tracking which keys have inverted polarity (North-facing magnet)
 static bitmap_t key_inverted[] = MAKE_BITMAP(NUM_KEYS);
 
 bool matrix_is_key_inverted(uint8_t key) {
@@ -56,11 +58,14 @@ matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
                 ADC_MAX_VALUE);
 }
 
-// Recompute and store the cached lenience for a key.
+// Recompute and store the cached 1% lenience for a key.
 // Must be called whenever adc_rest_value or adc_bottom_out_value changes.
 __attribute__((always_inline)) static inline void
 matrix_update_lenience(uint8_t key) {
-  key_matrix[key].adc_rest_lenience = MATRIX_REST_LENIENCE;
+  uint16_t range = (key_matrix[key].adc_bottom_out_value > key_matrix[key].adc_rest_value)
+                   ? (key_matrix[key].adc_bottom_out_value - key_matrix[key].adc_rest_value)
+                   : 0;
+  key_matrix[key].adc_rest_lenience = (uint16_t)(range / 100);
 }
 
 key_state_t key_matrix[NUM_KEYS];
@@ -114,16 +119,8 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
 
   // 2. Initialize rest values to current live ADC readings
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    uint16_t raw_current = analog_read(i);
-    raw_boot_rest[i] = raw_current;
-    if (bitmap_get(key_inverted, i)) {
-      raw_current = ADC_MAX_VALUE - raw_current;
-    }
-    key_matrix[i].adc_rest_value = raw_current;
-    key_matrix[i].adc_filtered = raw_current;
-    key_matrix[i].adc_bottom_out_value =
-        matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
-    matrix_update_lenience(i);
+    raw_boot_rest[i] = analog_read(i);
+    key_matrix[i].adc_rest_value = key_matrix[i].adc_filtered;
     key_matrix[i].distance = 0;
     key_matrix[i].extremum = 0;
     key_matrix[i].key_dir = KEY_DIR_INACTIVE;
@@ -144,9 +141,6 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
 
       if (new_adc_filtered < key_matrix[i].adc_rest_value) {
         key_matrix[i].adc_rest_value = new_adc_filtered;
-        key_matrix[i].adc_bottom_out_value =
-            matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
-        matrix_update_lenience(i);
       }
     }
   }
@@ -163,25 +157,37 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     EECONFIG_WRITE(calibration, &calib);
   }
 
+  // 5. Update bottom out values and lenience using the fresh rest values
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    key_matrix[i].adc_bottom_out_value =
+        matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+    matrix_update_lenience(i);
+  }
+
+  // 6. Update cached hysteresis gap
   matrix_update_calibration();
 }
 
 void matrix_start_manual_calibration(const uint8_t *keys, uint8_t count) {
+  matrix_recalibrate(false);
   manual_calib_active = true;
-  if (keys == NULL || count == 0) {
-    for (uint32_t i = 0; i < NUM_KEYS; i++) {
+  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    bool target = (count == 0);
+    if (!target && keys != NULL) {
+      for (uint8_t k = 0; k < count; k++) {
+        if (keys[k] == i) {
+          target = true;
+          break;
+        }
+      }
+    }
+    if (target) {
       manual_calib_status[i] = CALIB_STATE_WAITING;
       manual_calib_dir[i] = 0;
       manual_calib_peak[i] = key_matrix[i].adc_rest_value;
-    }
-  } else {
-    for (uint32_t i = 0; i < count; i++) {
-      uint8_t k = keys[i];
-      if (k < NUM_KEYS) {
-        manual_calib_status[k] = CALIB_STATE_WAITING;
-        manual_calib_dir[k] = 0;
-        manual_calib_peak[k] = key_matrix[k].adc_rest_value;
-      }
+    } else {
+      manual_calib_status[i] = CALIB_STATE_IDLE;
+      manual_calib_dir[i] = 0;
     }
   }
 }
@@ -334,8 +340,13 @@ void matrix_scan(void) {
         adc_to_distance(new_adc_filtered,
                         key_matrix[i].adc_rest_value + key_matrix[i].adc_rest_lenience,
                         key_matrix[i].adc_bottom_out_value);
-    const uint16_t dist = raw_dist;
-    key_matrix[i].distance = dist;
+    // Suppress tiny ±0.006mm (gap >> 3) jitter when holding key stationary
+    uint16_t dist = key_matrix[i].distance;
+    if (raw_dist == 0 || raw_dist == 10000 ||
+        abs((int32_t)raw_dist - (int32_t)dist) > (gap >> 3)) {
+      dist = raw_dist;
+      key_matrix[i].distance = dist;
+    }
 
     const uint16_t deact_point = (actuation->actuation_point > gap)
                                 ? (actuation->actuation_point - gap)
