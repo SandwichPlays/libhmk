@@ -220,6 +220,10 @@ void analog_init(void) {
 
 void analog_task(void) {}
 
+static volatile uint32_t analog_sweep_count = 0;
+
+uint32_t analog_get_sweep_count(void) { return analog_sweep_count; }
+
 uint16_t analog_read(uint8_t key) { return adc_values[key]; }
 
 //--------------------------------------------------------------------+
@@ -268,6 +272,7 @@ void DMA1_Channel1_IRQHandler(void) {
 #else
     // We initialize all the ADC values when we have read all the raw input.
     adc_initialized = true;
+    analog_sweep_count++;
     // Immediately start the next conversion
     adc_ordinary_software_trigger_enable(ADC1, TRUE);
 #endif

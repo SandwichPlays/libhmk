@@ -113,3 +113,10 @@ void analog_task(void);
  * @return Raw ADC value
  */
 uint16_t analog_read(uint8_t key);
+
+/**
+ * @brief Get the hardware ADC conversion sweep counter
+ *
+ * @return Monotonically increasing count of completed ADC sweeps
+ */
+uint32_t analog_get_sweep_count(void);
