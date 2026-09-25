@@ -243,10 +243,3 @@ void tud_hid_report_complete_cb(uint8_t instance, const uint8_t *report,
     hid_send_hid_report(report[0] + 1);
 }
 
-void tud_mount_cb(void) {
-  tud_sof_cb_enable(true);
-}
-
-void tud_sof_cb(uint32_t frame_count) {
-  (void)frame_count;
-}
