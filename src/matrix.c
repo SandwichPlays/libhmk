@@ -58,14 +58,15 @@ matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
                 ADC_MAX_VALUE);
 }
 
-// Recompute and store the cached 1% lenience for a key.
+#if !defined(MATRIX_REST_LENIENCE_COUNTS)
+#define MATRIX_REST_LENIENCE_COUNTS 3
+#endif
+
+// Recompute and store the cached rest lenience (3 ADC counts) for a key.
 // Must be called whenever adc_rest_value or adc_bottom_out_value changes.
 __attribute__((always_inline)) static inline void
 matrix_update_lenience(uint8_t key) {
-  uint16_t range = (key_matrix[key].adc_bottom_out_value > key_matrix[key].adc_rest_value)
-                   ? (key_matrix[key].adc_bottom_out_value - key_matrix[key].adc_rest_value)
-                   : 0;
-  key_matrix[key].adc_rest_lenience = (uint16_t)(range / 100);
+  key_matrix[key].adc_rest_lenience = MATRIX_REST_LENIENCE_COUNTS;
 }
 
 key_state_t key_matrix[NUM_KEYS];
