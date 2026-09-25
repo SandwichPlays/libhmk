@@ -237,6 +237,13 @@ void matrix_scan(void) {
   const uint32_t now = timer_read();
   const uint32_t debounce_time = eeconfig->options.debounce_ms;
 
+  static uint32_t last_sweep = 0;
+  const uint32_t curr_sweep = analog_get_sweep_count();
+  const bool is_new_sweep = (curr_sweep == 0) || (curr_sweep != last_sweep) || manual_calib_active;
+  if (curr_sweep != 0) {
+    last_sweep = curr_sweep;
+  }
+
   // Only scan keys that are connected to analog inputs
   for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS; i++) {
     const uint16_t raw_current = analog_read(i);
@@ -275,8 +282,11 @@ void matrix_scan(void) {
     const uint16_t prev_filtered = key_matrix[i].adc_filtered;
     const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
 
-    uint16_t new_adc_filtered = EMA(raw_val, prev_filtered);
-    key_matrix[i].adc_filtered = new_adc_filtered;
+    uint16_t new_adc_filtered = prev_filtered;
+    if (is_new_sweep) {
+      new_adc_filtered = EMA(raw_val, prev_filtered);
+      key_matrix[i].adc_filtered = new_adc_filtered;
+    }
 
     // Stability baseline tracking (only when key is completely released and idle)
     int32_t diff = (int32_t)new_adc_filtered - (int32_t)prev_filtered;
