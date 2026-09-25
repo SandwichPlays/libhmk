@@ -100,13 +100,20 @@ void matrix_init(void) { matrix_recalibrate(false); }
 void matrix_recalibrate(bool reset_bottom_out_threshold) {
   if (reset_bottom_out_threshold) {
     uint16_t bottom_out_threshold[NUM_KEYS] = {0};
+    for (uint32_t i = 0; i < NUM_KEYS; i++) {
+      if (bitmap_get(key_inverted, i) ||
+          (eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_POLARITY_INVERTED)) {
+        bottom_out_threshold[i] = BOTTOM_OUT_POLARITY_INVERTED;
+      }
+    }
     EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
   }
 
   // Load saved polarity from bottom_out_threshold bit 15
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     bool inv =
-        (eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_POLARITY_INVERTED) != 0;
+        bitmap_get(key_inverted, i) ||
+        ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_POLARITY_INVERTED) != 0);
     bitmap_set(key_inverted, i, inv);
   }
 

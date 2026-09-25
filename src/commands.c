@@ -59,7 +59,7 @@ void command_process(const uint8_t *buf) {
     break;
   }
   case COMMAND_RECALIBRATE: {
-    matrix_recalibrate(true);
+    matrix_recalibrate(false);
     break;
   }
   case COMMAND_ANALOG_INFO: {
