@@ -59,11 +59,7 @@ matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
 }
 
 #if !defined(MATRIX_REST_LENIENCE_COUNTS)
-#if ADC_RESOLUTION == 14
-#define MATRIX_REST_LENIENCE_COUNTS 8
-#else
 #define MATRIX_REST_LENIENCE_COUNTS 2
-#endif
 #endif
 
 // Recompute and store the cached rest lenience for a key.
@@ -216,12 +212,7 @@ void matrix_finish_manual_calibration(bool save) {
       bottom_out_threshold[i] = eeconfig->bottom_out_threshold[i];
       if (manual_calib_status[i] == CALIB_STATE_COMPLETED ||
           manual_calib_status[i] == CALIB_STATE_RECORDING) {
-#if ADC_RESOLUTION == 14
-        const uint16_t min_calib_delta = 200;
-#else
-        const uint16_t min_calib_delta = 50;
-#endif
-        if (manual_calib_peak[i] > key_matrix[i].adc_rest_value + min_calib_delta) {
+        if (manual_calib_peak[i] > key_matrix[i].adc_rest_value + 50) {
           uint16_t delta = manual_calib_peak[i] - key_matrix[i].adc_rest_value;
           if (bitmap_get(key_inverted, i)) {
             delta |= BOTTOM_OUT_POLARITY_INVERTED;
@@ -263,15 +254,10 @@ void matrix_scan(void) {
     const uint16_t raw_current = analog_read(i);
 
     // Dynamic polarity auto-detection for uncalibrated keys
-#if ADC_RESOLUTION == 14
-#define MATRIX_POLARITY_DETECT_DELTA 600
-#else
-#define MATRIX_POLARITY_DETECT_DELTA 150
-#endif
     if ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_THRESHOLD_MASK) == 0 &&
         !manual_calib_active) {
       if (!bitmap_get(key_inverted, i)) {
-        if (raw_current + MATRIX_POLARITY_DETECT_DELTA < raw_boot_rest[i]) {
+        if (raw_current + 150 < raw_boot_rest[i]) {
           bitmap_set(key_inverted, i, true);
           key_matrix[i].adc_rest_value = ADC_MAX_VALUE - raw_boot_rest[i];
           key_matrix[i].adc_filtered = ADC_MAX_VALUE - raw_current;
@@ -280,7 +266,7 @@ void matrix_scan(void) {
           matrix_update_lenience(i);
         }
       } else {
-        if (raw_current > raw_boot_rest[i] + MATRIX_POLARITY_DETECT_DELTA) {
+        if (raw_current > raw_boot_rest[i] + 150) {
           bitmap_set(key_inverted, i, false);
           key_matrix[i].adc_rest_value = raw_boot_rest[i];
           key_matrix[i].adc_filtered = raw_current;
@@ -302,15 +288,8 @@ void matrix_scan(void) {
     const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
 
     // Run-length persistence filter: eliminate single-sample comparator toggle
-#if ADC_RESOLUTION == 14
-#define MATRIX_NOISE_TOGGLE_DELTA 4
-#define MATRIX_STABLE_TRACK_DIFF 12
-#else
-#define MATRIX_NOISE_TOGGLE_DELTA 1
-#define MATRIX_STABLE_TRACK_DIFF 3
-#endif
     uint16_t effective_raw = prev_filtered;
-    if (raw_val == last_raw_val[i] || abs((int32_t)raw_val - (int32_t)last_raw_val[i]) > MATRIX_NOISE_TOGGLE_DELTA) {
+    if (raw_val == last_raw_val[i] || abs((int32_t)raw_val - (int32_t)last_raw_val[i]) > 1) {
       effective_raw = raw_val;
     }
     last_raw_val[i] = raw_val;
@@ -320,7 +299,7 @@ void matrix_scan(void) {
 
     // Stability baseline tracking (only when key is completely released and idle)
     int32_t diff = (int32_t)new_adc_filtered - (int32_t)prev_filtered;
-    if (diff < -MATRIX_STABLE_TRACK_DIFF || diff > MATRIX_STABLE_TRACK_DIFF) {
+    if (diff < -3 || diff > 3) {
       stable_timer[i] = now;
     } else {
       if (now - stable_timer[i] >= 15) {
@@ -339,15 +318,10 @@ void matrix_scan(void) {
 
     if (manual_calib_active && manual_calib_status[i] != CALIB_STATE_IDLE) {
       if (manual_calib_status[i] == CALIB_STATE_WAITING) {
-#if ADC_RESOLUTION == 14
-        const uint16_t calib_detect = 240;
-#else
-        const uint16_t calib_detect = 60;
-#endif
-        if (new_adc_filtered > key_matrix[i].adc_rest_value + calib_detect) {
+        if (new_adc_filtered > key_matrix[i].adc_rest_value + 60) {
           manual_calib_status[i] = CALIB_STATE_RECORDING;
           manual_calib_peak[i] = new_adc_filtered;
-        } else if (new_adc_filtered + calib_detect < key_matrix[i].adc_rest_value) {
+        } else if (new_adc_filtered + 60 < key_matrix[i].adc_rest_value) {
           // North-facing switch detected: invert immediately on initial press!
           bitmap_set(key_inverted, i, !bitmap_get(key_inverted, i));
           uint16_t old_rest = key_matrix[i].adc_rest_value;
@@ -361,16 +335,11 @@ void matrix_scan(void) {
           manual_calib_status[i] = CALIB_STATE_RECORDING;
         }
       } else if (manual_calib_status[i] == CALIB_STATE_RECORDING) {
-#if ADC_RESOLUTION == 14
-        const uint16_t release_margin = 120;
-#else
-        const uint16_t release_margin = 30;
-#endif
         if (new_adc_filtered > manual_calib_peak[i]) {
           manual_calib_peak[i] = new_adc_filtered;
           key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
           matrix_update_lenience(i);
-        } else if (new_adc_filtered <= key_matrix[i].adc_rest_value + release_margin) {
+        } else if (new_adc_filtered <= key_matrix[i].adc_rest_value + 30) {
           manual_calib_status[i] = CALIB_STATE_COMPLETED;
           key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
           matrix_update_lenience(i);

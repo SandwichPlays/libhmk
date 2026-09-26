@@ -30,16 +30,11 @@
 #endif
 
 #if !defined(ADC_OVERSAMPLE_SHIFT)
-#if ADC_RESOLUTION == 14
-// Hardware oversampling bit shift: 2 bits right shift (16x oversample -> 14-bit output)
-#define ADC_OVERSAMPLE_SHIFT ADC_OVERSAMPLE_SHIFT_2
-#else
-// Hardware oversampling bit shift: 4 bits right shift (16x oversample -> 12-bit output)
+// Hardware oversampling bit shift: 4 bits right shift (16-bit accumulator -> 12-bit clean result)
 #define ADC_OVERSAMPLE_SHIFT ADC_OVERSAMPLE_SHIFT_4
-#endif
 #endif
 
 // ADC resolution in bits, set by `scripts/make.py`
-#if ADC_RESOLUTION != 12 && ADC_RESOLUTION != 14
+#if ADC_RESOLUTION != 12
 #error "Unsupported ADC resolution"
 #endif

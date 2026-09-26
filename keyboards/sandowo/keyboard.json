@@ -18,7 +18,6 @@
     "driver": "at32f405xx"
   },
   "analog": {
-    "adc_resolution": 14,
     "raw": {
       "input": [
         "A4",
@@ -35,8 +34,8 @@
     }
   },
   "calibration": {
-    "initial_rest_value": 9600,
-    "initial_bottom_out_threshold": 2800,
+    "initial_rest_value": 2400,
+    "initial_bottom_out_threshold": 700,
     "switch_travel": 3.6
   },
   "encoders": [
