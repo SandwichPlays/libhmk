@@ -87,6 +87,7 @@ static uint32_t stable_timer[NUM_KEYS] = {0};
 static uint16_t hyst_gap[NUM_KEYS] = {0};
 static uint16_t raw_boot_rest[NUM_KEYS] = {0};
 static uint16_t last_raw_val[NUM_KEYS] = {0};
+static uint16_t adc_stage2[NUM_KEYS] = {0};
 static volatile bool matrix_state_changed = false;
 
 void matrix_update_calibration(void) {
@@ -134,6 +135,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     raw_boot_rest[i] = analog_read(i);
     last_raw_val[i] = raw_boot_rest[i];
+    adc_stage2[i] = key_matrix[i].adc_filtered;
     key_matrix[i].adc_rest_value = key_matrix[i].adc_filtered;
     key_matrix[i].distance = 0;
     key_matrix[i].extremum = 0;
@@ -315,8 +317,12 @@ void matrix_scan(void) {
     }
     last_raw_val[i] = raw_val;
 
-    uint16_t new_adc_filtered = EMA(effective_raw, prev_filtered);
-    key_matrix[i].adc_filtered = new_adc_filtered;
+    uint16_t stage1 = EMA(effective_raw, prev_filtered);
+    key_matrix[i].adc_filtered = stage1;
+
+    // 2nd-Stage EMA: steep -40dB/decade noise attenuation
+    uint16_t new_adc_filtered = EMA(stage1, adc_stage2[i]);
+    adc_stage2[i] = new_adc_filtered;
 
     // Stability baseline tracking (only when key is completely released and idle)
     int32_t diff = (int32_t)new_adc_filtered - (int32_t)prev_filtered;
