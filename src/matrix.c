@@ -83,6 +83,10 @@ static uint32_t stable_timer[NUM_KEYS] = {0};
 static uint16_t hyst_gap[NUM_KEYS] = {0};
 static uint16_t raw_boot_rest[NUM_KEYS] = {0};
 static uint16_t last_raw_val[NUM_KEYS] = {0};
+static bool is_moving[NUM_KEYS] = {false};
+static uint16_t locked_dist[NUM_KEYS] = {0};
+static uint16_t last_motion_anchor[NUM_KEYS] = {0};
+static uint8_t stationary_count[NUM_KEYS] = {0};
 static volatile bool matrix_state_changed = false;
 
 void matrix_update_calibration(void) {
@@ -136,6 +140,10 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     key_matrix[i].key_dir = KEY_DIR_INACTIVE;
     key_matrix[i].is_pressed = false;
     stable_timer[i] = timer_read();
+    is_moving[i] = false;
+    locked_dist[i] = 0;
+    last_motion_anchor[i] = 0;
+    stationary_count[i] = 0;
   }
 
   // 3. Track resting noise during calibration duration
@@ -359,11 +367,56 @@ void matrix_scan(void) {
         adc_to_distance(new_adc_filtered,
                         key_matrix[i].adc_rest_value + key_matrix[i].adc_rest_lenience,
                         key_matrix[i].adc_bottom_out_value);
+    const int32_t noise_thresh = gap >> 3;
     uint16_t dist = key_matrix[i].distance;
-    if (raw_dist == 0 || raw_dist == 10000 ||
-        abs((int32_t)raw_dist - (int32_t)dist) > (gap >> 3)) {
+
+    if (raw_dist == 0) {
+      is_moving[i] = false;
+      locked_dist[i] = 0;
+      last_motion_anchor[i] = 0;
+      stationary_count[i] = 0;
+      dist = 0;
+      key_matrix[i].distance = 0;
+    } else if (raw_dist == 10000) {
+      is_moving[i] = false;
+      locked_dist[i] = 10000;
+      last_motion_anchor[i] = 10000;
+      stationary_count[i] = 0;
+      dist = 10000;
+      key_matrix[i].distance = 10000;
+    } else if (!is_moving[i]) {
+      // STATIONARY: Output locked to eliminate analog noise flicker
+      if (abs((int32_t)raw_dist - (int32_t)locked_dist[i]) > noise_thresh) {
+        // Physical motion detected: unlock immediately
+        is_moving[i] = true;
+        last_motion_anchor[i] = raw_dist;
+        stationary_count[i] = 0;
+        dist = raw_dist;
+        key_matrix[i].distance = dist;
+      } else {
+        dist = locked_dist[i];
+        key_matrix[i].distance = dist;
+      }
+    } else {
+      // MOVING: Zero deadband real-time pass-through
       dist = raw_dist;
       key_matrix[i].distance = dist;
+
+      // Check if motion has stopped
+      if (abs((int32_t)raw_dist - (int32_t)last_motion_anchor[i]) <= noise_thresh) {
+        stationary_count[i]++;
+        if (stationary_count[i] >= 30) {
+          // Stationary for ~30 scan sweeps (~1ms) -> re-lock
+          is_moving[i] = false;
+          locked_dist[i] = raw_dist;
+          dist = locked_dist[i];
+          key_matrix[i].distance = dist;
+        }
+      } else {
+        // Still moving -> update anchor and reset hold counter
+        last_motion_anchor[i] = raw_dist;
+        stationary_count[i] = 0;
+      }
     }
 
     const uint16_t deact_point = (actuation->actuation_point > gap)
