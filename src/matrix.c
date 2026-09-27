@@ -52,10 +52,10 @@ __attribute__((always_inline)) static inline uint16_t
 matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
   uint16_t threshold =
       eeconfig->bottom_out_threshold[key] & BOTTOM_OUT_THRESHOLD_MASK;
-  return M_MIN(rest_value +
-                   M_MAX(eeconfig->calibration.initial_bottom_out_threshold,
-                         threshold),
-                ADC_MAX_VALUE);
+  if (threshold == 0) {
+    threshold = eeconfig->calibration.initial_bottom_out_threshold;
+  }
+  return M_MIN((uint32_t)rest_value + threshold, ADC_MAX_VALUE);
 }
 
 #if !defined(MATRIX_REST_LENIENCE_COUNTS)
@@ -206,8 +206,6 @@ void matrix_start_manual_calibration(const uint8_t *keys, uint8_t count) {
 void matrix_finish_manual_calibration(bool save) {
   if (save) {
     uint16_t bottom_out_threshold[NUM_KEYS];
-    uint32_t delta_sum = 0;
-    uint32_t delta_count = 0;
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
       bottom_out_threshold[i] = eeconfig->bottom_out_threshold[i];
       if (manual_calib_status[i] == CALIB_STATE_COMPLETED ||
@@ -218,18 +216,10 @@ void matrix_finish_manual_calibration(bool save) {
             delta |= BOTTOM_OUT_POLARITY_INVERTED;
           }
           bottom_out_threshold[i] = delta;
-          delta_sum += (delta & BOTTOM_OUT_THRESHOLD_MASK);
-          delta_count++;
         }
       }
     }
     EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
-
-    if (delta_count > 0) {
-      eeconfig_calibration_t calib = eeconfig->calibration;
-      calib.initial_bottom_out_threshold = (uint16_t)(delta_sum / delta_count);
-      EECONFIG_WRITE(calibration, &calib);
-    }
   }
   manual_calib_active = false;
   for (uint32_t i = 0; i < NUM_KEYS; i++) {

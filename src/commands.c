@@ -16,6 +16,7 @@
 #include "commands.h"
 
 #include "advanced_keys.h"
+#include "distance.h"
 #include "hardware/hardware.h"
 #include "layout.h"
 #include "matrix.h"
@@ -72,7 +73,10 @@ void command_process(const uint8_t *buf) {
          i < M_ARRAY_SIZE(out->analog_info) && i + p->offset < NUM_KEYS; i++) {
       const uint8_t key_idx = i + p->offset;
       o[i].adc_value = key_matrix[key_idx].adc_filtered;
-      o[i].distance = key_matrix[key_idx].distance;
+      o[i].distance = adc_to_distance(
+          key_matrix[key_idx].adc_filtered,
+          key_matrix[key_idx].adc_rest_value + key_matrix[key_idx].adc_rest_lenience,
+          key_matrix[key_idx].adc_bottom_out_value);
       uint8_t status = matrix_get_calibration_status(key_idx);
       if (key_matrix[key_idx].is_pressed) {
         status |= 0x80;
