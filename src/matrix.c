@@ -91,8 +91,9 @@ void matrix_update_calibration(void) {
     if (travel_tenths < 20 || travel_tenths > 50) {
       travel_tenths = 36;
     }
-    uint16_t gap = (uint16_t)(5000 / travel_tenths);
-    hyst_gap[i] = (gap < 50) ? 139 : gap;
+    // 0.03mm hysteresis guard = 0.03 * 100000 / travel_tenths = 3000 / travel_tenths
+    uint16_t gap = (uint16_t)(3000 / travel_tenths);
+    hyst_gap[i] = (gap < 30) ? 83 : gap;
   }
 }
 
