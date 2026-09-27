@@ -105,8 +105,8 @@ void analog_init(void) {
 #endif
 
   // Initialize the ADC peripheral
-  adc_clock_div_set(ADC_DIV_8);
   adc_reset(ADC1);
+  adc_clock_div_set(ADC_DIV_8);
   adc_base_default_para_init(&adc_base_struct);
   adc_base_struct.sequence_mode = TRUE;
 #if ADC_NUM_MUX_INPUTS > 0
