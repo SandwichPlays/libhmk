@@ -75,7 +75,7 @@ void command_process(const uint8_t *buf) {
       o[i].adc_value = key_matrix[key_idx].adc_filtered;
       o[i].distance = adc_to_distance(
           key_matrix[key_idx].adc_filtered,
-          key_matrix[key_idx].adc_rest_value + key_matrix[key_idx].adc_rest_lenience,
+          key_matrix[key_idx].adc_rest_value,
           key_matrix[key_idx].adc_bottom_out_value);
       uint8_t status = matrix_get_calibration_status(key_idx);
       if (key_matrix[key_idx].is_pressed) {

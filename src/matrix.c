@@ -58,15 +58,10 @@ matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
   return M_MIN((uint32_t)rest_value + threshold, ADC_MAX_VALUE);
 }
 
-#if !defined(MATRIX_REST_LENIENCE_COUNTS)
-#define MATRIX_REST_LENIENCE_COUNTS 2
-#endif
-
-// Recompute and store the cached rest lenience for a key.
-// Must be called whenever adc_rest_value or adc_bottom_out_value changes.
+// Rest lenience is handled smoothly in the distance domain (DISTANCE_REST_LENIENCE).
 __attribute__((always_inline)) static inline void
 matrix_update_lenience(uint8_t key) {
-  key_matrix[key].adc_rest_lenience = MATRIX_REST_LENIENCE_COUNTS;
+  key_matrix[key].adc_rest_lenience = 0;
 }
 
 key_state_t key_matrix[NUM_KEYS];
@@ -348,7 +343,7 @@ void matrix_scan(void) {
     const uint16_t gap = hyst_gap[i];
     const uint16_t raw_dist =
         adc_to_distance(new_adc_filtered,
-                        key_matrix[i].adc_rest_value + key_matrix[i].adc_rest_lenience,
+                        key_matrix[i].adc_rest_value,
                         key_matrix[i].adc_bottom_out_value);
     uint16_t dist = key_matrix[i].distance;
     if (raw_dist == 0 || raw_dist == 10000 ||

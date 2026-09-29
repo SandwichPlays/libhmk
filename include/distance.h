@@ -105,6 +105,16 @@ static const uint16_t distance_lut[] = {
 _Static_assert(M_ARRAY_SIZE(distance_lut) == DISTANCE_LUT_SIZE,
                "Invalid distance lookup table size");
 
+#if !defined(DISTANCE_REST_LENIENCE)
+// Distance units (0-10000) at top to guard against resting magnetic jitter (~0.022mm)
+#define DISTANCE_REST_LENIENCE 60
+#endif
+
+#if !defined(DISTANCE_BOTTOM_LENIENCE)
+// Distance units (0-10000) at bottom to guarantee clean 10000 bottom-out (~0.022mm)
+#define DISTANCE_BOTTOM_LENIENCE 60
+#endif
+
 /**
  * @brief Convert ADC value to distance in the range [0, 10000]
  *
@@ -132,10 +142,23 @@ adc_to_distance(uint16_t adc, uint16_t adc_rest_value,
   const uint32_t frac = scaled & 0xFF;
 
   if (idx >= DISTANCE_LUT_SIZE - 1)
-    return distance_lut[DISTANCE_LUT_SIZE - 1];
+    return 10000;
 
   const uint32_t d0 = distance_lut[idx];
   const uint32_t d1 = distance_lut[idx + 1];
 
-  return (uint16_t)(d0 + (((d1 - d0) * frac) >> 8));
+  uint16_t raw_dist = (uint16_t)(d0 + (((d1 - d0) * frac) >> 8));
+
+#if (DISTANCE_REST_LENIENCE > 0) || (DISTANCE_BOTTOM_LENIENCE > 0)
+  if (raw_dist <= DISTANCE_REST_LENIENCE)
+    return 0;
+  if (raw_dist >= (10000 - DISTANCE_BOTTOM_LENIENCE))
+    return 10000;
+
+  // Smoothly rescale [REST_LENIENCE, 10000 - BOTTOM_LENIENCE] into [0, 10000] with zero jump
+  return (uint16_t)(((uint32_t)(raw_dist - DISTANCE_REST_LENIENCE) * 10000) /
+                    (10000 - DISTANCE_REST_LENIENCE - DISTANCE_BOTTOM_LENIENCE));
+#else
+  return raw_dist;
+#endif
 }
