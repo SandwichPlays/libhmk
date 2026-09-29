@@ -242,3 +242,4 @@ void tud_hid_report_complete_cb(uint8_t instance, const uint8_t *report,
     // Start from the next report ID
     hid_send_hid_report(report[0] + 1);
 }
+

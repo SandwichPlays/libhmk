@@ -105,15 +105,25 @@ void analog_init(void) {
 #endif
 
   // Initialize the ADC peripheral
-  adc_clock_div_set(ADC_DIV_8);
   adc_reset(ADC1);
+  adc_clock_div_set(ADC_DIV_8);
   adc_base_default_para_init(&adc_base_struct);
   adc_base_struct.sequence_mode = TRUE;
+#if ADC_NUM_MUX_INPUTS > 0
   adc_base_struct.repeat_mode = FALSE;
+#else
+  adc_base_struct.repeat_mode = TRUE;
+#endif
   adc_base_struct.data_align = ADC_RIGHT_ALIGNMENT;
   adc_base_struct.ordinary_channel_length =
       ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS;
   adc_base_config(ADC1, &adc_base_struct);
+
+#if defined(ADC_OVERSAMPLE_RATIO) && defined(ADC_OVERSAMPLE_SHIFT)
+  adc_oversample_ratio_shift_set(ADC1, ADC_OVERSAMPLE_RATIO,
+                                 ADC_OVERSAMPLE_SHIFT);
+  adc_ordinary_oversample_enable(ADC1, TRUE);
+#endif
 
 #if ADC_NUM_MUX_INPUTS > 0
   // Initialize the multiplexer input channels
@@ -220,6 +230,10 @@ void analog_init(void) {
 
 void analog_task(void) {}
 
+static volatile uint32_t analog_sweep_count = 0;
+
+uint32_t analog_get_sweep_count(void) { return analog_sweep_count; }
+
 uint16_t analog_read(uint8_t key) { return adc_values[key]; }
 
 //--------------------------------------------------------------------+
@@ -257,6 +271,9 @@ void DMA1_Channel1_IRQHandler(void) {
     // We initialize all the ADC values when we have gone through all the
     // multiplexer input channels.
     adc_initialized |= (current_mux_channel == 0);
+    if (current_mux_channel == 0) {
+      analog_sweep_count++;
+    }
 
     // Set the multiplexer select pins
     for (uint32_t i = 0; i < ADC_NUM_MUX_SELECT_PINS; i++)
@@ -266,10 +283,9 @@ void DMA1_Channel1_IRQHandler(void) {
     // Delay to allow the multiplexer outputs to settle
     tmr_counter_enable(TMR6, TRUE);
 #else
-    // We initialize all the ADC values when we have read all the raw input.
+    // In continuous repeat_mode, conversions loop automatically in hardware
     adc_initialized = true;
-    // Immediately start the next conversion
-    adc_ordinary_software_trigger_enable(ADC1, TRUE);
+    analog_sweep_count++;
 #endif
   }
 }

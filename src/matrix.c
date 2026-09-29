@@ -52,20 +52,16 @@ __attribute__((always_inline)) static inline uint16_t
 matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
   uint16_t threshold =
       eeconfig->bottom_out_threshold[key] & BOTTOM_OUT_THRESHOLD_MASK;
-  return M_MIN(rest_value +
-                   M_MAX(eeconfig->calibration.initial_bottom_out_threshold,
-                         threshold),
-                ADC_MAX_VALUE);
+  if (threshold == 0) {
+    threshold = eeconfig->calibration.initial_bottom_out_threshold;
+  }
+  return M_MIN((uint32_t)rest_value + threshold, ADC_MAX_VALUE);
 }
 
-// Recompute and store the cached 1% lenience for a key.
-// Must be called whenever adc_rest_value or adc_bottom_out_value changes.
+// Rest lenience is handled smoothly in the distance domain (DISTANCE_REST_LENIENCE).
 __attribute__((always_inline)) static inline void
 matrix_update_lenience(uint8_t key) {
-  uint16_t range = (key_matrix[key].adc_bottom_out_value > key_matrix[key].adc_rest_value)
-                   ? (key_matrix[key].adc_bottom_out_value - key_matrix[key].adc_rest_value)
-                   : 0;
-  key_matrix[key].adc_rest_lenience = (uint16_t)(range / 100);
+  key_matrix[key].adc_rest_lenience = 0;
 }
 
 key_state_t key_matrix[NUM_KEYS];
@@ -81,6 +77,8 @@ static uint16_t manual_calib_peak[NUM_KEYS] = {0};
 static uint32_t stable_timer[NUM_KEYS] = {0};
 static uint16_t hyst_gap[NUM_KEYS] = {0};
 static uint16_t raw_boot_rest[NUM_KEYS] = {0};
+static uint16_t last_raw_val[NUM_KEYS] = {0};
+static volatile bool matrix_state_changed = false;
 
 void matrix_update_calibration(void) {
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
@@ -88,8 +86,9 @@ void matrix_update_calibration(void) {
     if (travel_tenths < 20 || travel_tenths > 50) {
       travel_tenths = 36;
     }
-    uint16_t gap = (uint16_t)(5000 / travel_tenths);
-    hyst_gap[i] = (gap < 50) ? 139 : gap;
+    // 0.03mm hysteresis guard = 0.03 * 100000 / travel_tenths = 3000 / travel_tenths
+    uint16_t gap = (uint16_t)(3000 / travel_tenths);
+    hyst_gap[i] = (gap < 30) ? 83 : gap;
   }
 }
 
@@ -98,13 +97,20 @@ void matrix_init(void) { matrix_recalibrate(false); }
 void matrix_recalibrate(bool reset_bottom_out_threshold) {
   if (reset_bottom_out_threshold) {
     uint16_t bottom_out_threshold[NUM_KEYS] = {0};
+    for (uint32_t i = 0; i < NUM_KEYS; i++) {
+      if (bitmap_get(key_inverted, i) ||
+          (eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_POLARITY_INVERTED)) {
+        bottom_out_threshold[i] = BOTTOM_OUT_POLARITY_INVERTED;
+      }
+    }
     EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
   }
 
   // Load saved polarity from bottom_out_threshold bit 15
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     bool inv =
-        (eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_POLARITY_INVERTED) != 0;
+        bitmap_get(key_inverted, i) ||
+        ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_POLARITY_INVERTED) != 0);
     bitmap_set(key_inverted, i, inv);
   }
 
@@ -119,6 +125,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   // 2. Initialize rest values to current live ADC readings
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     raw_boot_rest[i] = analog_read(i);
+    last_raw_val[i] = raw_boot_rest[i];
     key_matrix[i].adc_rest_value = key_matrix[i].adc_filtered;
     key_matrix[i].distance = 0;
     key_matrix[i].extremum = 0;
@@ -158,6 +165,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
 
   // 5. Update bottom out values and lenience using the fresh rest values
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    raw_boot_rest[i] = analog_read(i);
     key_matrix[i].adc_bottom_out_value =
         matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
     matrix_update_lenience(i);
@@ -194,8 +202,6 @@ void matrix_start_manual_calibration(const uint8_t *keys, uint8_t count) {
 void matrix_finish_manual_calibration(bool save) {
   if (save) {
     uint16_t bottom_out_threshold[NUM_KEYS];
-    uint32_t delta_sum = 0;
-    uint32_t delta_count = 0;
     for (uint32_t i = 0; i < NUM_KEYS; i++) {
       bottom_out_threshold[i] = eeconfig->bottom_out_threshold[i];
       if (manual_calib_status[i] == CALIB_STATE_COMPLETED ||
@@ -206,18 +212,10 @@ void matrix_finish_manual_calibration(bool save) {
             delta |= BOTTOM_OUT_POLARITY_INVERTED;
           }
           bottom_out_threshold[i] = delta;
-          delta_sum += (delta & BOTTOM_OUT_THRESHOLD_MASK);
-          delta_count++;
         }
       }
     }
     EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
-
-    if (delta_count > 0) {
-      eeconfig_calibration_t calib = eeconfig->calibration;
-      calib.initial_bottom_out_threshold = (uint16_t)(delta_sum / delta_count);
-      EECONFIG_WRITE(calibration, &calib);
-    }
   }
   manual_calib_active = false;
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
@@ -236,6 +234,7 @@ void matrix_scan(void) {
   const uint32_t now = timer_read();
   const uint32_t debounce_time = eeconfig->options.debounce_ms;
 
+
   // Only scan keys that are connected to analog inputs
   for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS; i++) {
     const uint16_t raw_current = analog_read(i);
@@ -244,7 +243,7 @@ void matrix_scan(void) {
     if ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_THRESHOLD_MASK) == 0 &&
         !manual_calib_active) {
       if (!bitmap_get(key_inverted, i)) {
-        if (raw_current + 40 < raw_boot_rest[i]) {
+        if (raw_current + 150 < raw_boot_rest[i]) {
           bitmap_set(key_inverted, i, true);
           key_matrix[i].adc_rest_value = ADC_MAX_VALUE - raw_boot_rest[i];
           key_matrix[i].adc_filtered = ADC_MAX_VALUE - raw_current;
@@ -253,7 +252,7 @@ void matrix_scan(void) {
           matrix_update_lenience(i);
         }
       } else {
-        if (raw_current > raw_boot_rest[i] + 40) {
+        if (raw_current > raw_boot_rest[i] + 150) {
           bitmap_set(key_inverted, i, false);
           key_matrix[i].adc_rest_value = raw_boot_rest[i];
           key_matrix[i].adc_filtered = raw_current;
@@ -274,7 +273,14 @@ void matrix_scan(void) {
     const uint16_t prev_filtered = key_matrix[i].adc_filtered;
     const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
 
-    uint16_t new_adc_filtered = EMA(raw_val, prev_filtered);
+    // Run-length persistence filter: eliminate single-sample comparator toggle
+    uint16_t effective_raw = prev_filtered;
+    if (raw_val == last_raw_val[i] || abs((int32_t)raw_val - (int32_t)last_raw_val[i]) > 1) {
+      effective_raw = raw_val;
+    }
+    last_raw_val[i] = raw_val;
+
+    uint16_t new_adc_filtered = EMA(effective_raw, prev_filtered);
     key_matrix[i].adc_filtered = new_adc_filtered;
 
     // Stability baseline tracking (only when key is completely released and idle)
@@ -337,9 +343,8 @@ void matrix_scan(void) {
     const uint16_t gap = hyst_gap[i];
     const uint16_t raw_dist =
         adc_to_distance(new_adc_filtered,
-                        key_matrix[i].adc_rest_value + key_matrix[i].adc_rest_lenience,
+                        key_matrix[i].adc_rest_value,
                         key_matrix[i].adc_bottom_out_value);
-    // Suppress tiny ±0.006mm (gap >> 3) jitter when holding key stationary
     uint16_t dist = key_matrix[i].distance;
     if (raw_dist == 0 || raw_dist == 10000 ||
         abs((int32_t)raw_dist - (int32_t)dist) > (gap >> 3)) {
@@ -446,6 +451,7 @@ void matrix_scan(void) {
       if (now - key_matrix[i].last_state_change_time >= debounce_time) {
         key_matrix[i].is_pressed = next_pressed;
         key_matrix[i].last_state_change_time = now;
+        matrix_state_changed = true;
       }
     }
   }
@@ -457,6 +463,17 @@ void matrix_disable_rapid_trigger(uint8_t key, bool disable) {
 
 void matrix_trigger_virtual_key(uint8_t key, bool is_pressed) {
   if (key < NUM_KEYS) {
-    key_matrix[key].is_pressed = is_pressed;
+    if (key_matrix[key].is_pressed != is_pressed) {
+      key_matrix[key].is_pressed = is_pressed;
+      matrix_state_changed = true;
+    }
   }
+}
+
+bool matrix_has_changed(void) {
+  if (matrix_state_changed) {
+    matrix_state_changed = false;
+    return true;
+  }
+  return false;
 }
