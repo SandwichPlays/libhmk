@@ -135,9 +135,9 @@ class Metadata:
 
 @dataclass
 class Driver:
-    platformio: PlatformIO
     tinyusb: TinyUSB
     metadata: Metadata
+    platformio: PlatformIO | None = None  # None for CMake-only targets (e.g. HPM)
 
 
 STM32F446XX = Driver(
@@ -293,5 +293,51 @@ STM32G431XX = Driver(
             ),
         ),
     ),
+)
+
+# HPM5300 series (HPM5361ICF1)
+# - 480MHz RISC-V RV32IMAFDCBP core
+# - 16-bit ADC at 2MSPS
+# - USB 2.0 HS OTG with built-in PHY
+# - 1MB internal flash (accessed via XPI ROM API)
+# - CMake build only (no PlatformIO platform available)
+#
+# NOTE: ADC pin mapping below is based on HPM5300 datasheet table.
+# ADC0 IN0-IN15 -> PA00-PA07, PB00-PB07
+# ADC1 IN0-IN15 -> PC00-PC07, PD00-PD07
+# Verify against your hardware schematic before use.
+HPM5300XX = Driver(
+    tinyusb=TinyUSB(mcu="hpm5300"),
+    metadata=Metadata(
+        bootloader=Bootloader(
+            address=0x00000000,  # HPM ROM start (entry via BPOR GPR flag + reset)
+            magic=0xCAFEBABE,
+        ),
+        flash=Flash(
+            # HPM5361: 1MB internal flash, 4KB erase sectors
+            sector_sizes=UniformSectors(
+                size=4096,
+                num_sectors=256,
+            ),
+            empty_value=0xFFFFFFFF,
+        ),
+        adc=ADC(
+            max_resolution=16,  # HPM ADC16: 16-bit resolution
+            input_pins=[
+                # ADC0 channels 0-15
+                "A0", "A1", "A2",  "A3",  "A4",  "A5",  "A6",  "A7",
+                "B0", "B1", "B2",  "B3",  "B4",  "B5",  "B6",  "B7",
+                # ADC1 channels 0-15
+                "C0", "C1", "C2",  "C3",  "C4",  "C5",  "C6",  "C7",
+                "D0", "D1", "D2",  "D3",  "D4",  "D5",  "D6",  "D7",
+            ],
+            # HPM GPIO: HPM_GPIO0 peripheral with GPIO_DI_GPIOA/B/C/D port selectors
+            to_gpio_array=lambda pins: (
+                [f"GPIO_DI_GPIO{pin[0]}" for pin in pins],
+                [int(pin[1:]) for pin in pins],
+            ),
+        ),
+    ),
+    platformio=None,  # HPM uses CMake + HPM SDK, not PlatformIO
 )
 
