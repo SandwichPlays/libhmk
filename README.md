@@ -2,8 +2,25 @@
 
 This repository contains libraries for building a Hall-effect keyboard firmware.
 
+## About This Fork
+
+This repository is a fork of [peppapighs/libhmk](https://github.com/peppapighs/libhmk) tailored for specific implementations. Most changes were implemented using AI coding assistants.
+
+### Changes from Upstream (peppapighs/libhmk)
+
+- **16-Bit Precision**: 0–10,000 range allowing sensitivity down to 0.01mm
+- **Noise Reduction**: Multi-stage filtering and resting jitter suppression
+- **Top & Bottom Deadzones**: Configurable top and bottom deadzones
+- **Debounce**: Configurable debounce from 1–10ms to prevent double-clicking
+- **Actuation Hysteresis**: Hysteresis guard at actuation to prevent false clicks from noise
+- **Calibration Improvements**: Auto polarity detection (North/South magnets), manual calibration mode, and auto rest value update
+- **Rotary Encoder Support**: Rotary encoder support with push-button
+- **Matrix Scanning & USB Improvements**: Faster scan-loop execution and non-blocking USB report handling
+
 ## Table of Contents
 
+- [About This Fork](#about-this-fork)
+  - [Changes from Upstream](#changes-from-upstream-peppapighslibhmk)
 - [Features](#features)
 - [Limitations](#limitations)
 - [Getting Started](#getting-started)
