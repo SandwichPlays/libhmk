@@ -288,7 +288,7 @@ void matrix_scan(void) {
     if (diff < -3 || diff > 3) {
       stable_timer[i] = now;
     } else {
-      if (now - stable_timer[i] >= 15) {
+      if (now - stable_timer[i] >= 30) {
         if (!key_matrix[i].is_pressed && key_matrix[i].distance == 0 &&
             !manual_calib_active &&
             new_adc_filtered < key_matrix[i].adc_rest_value) {
