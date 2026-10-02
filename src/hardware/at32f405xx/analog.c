@@ -91,7 +91,7 @@ static volatile bool adc_initialized = false;
 __attribute__((aligned(8))) static volatile uint16_t
     adc_buffer[ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS];
 // ADC values for each key
-static volatile uint16_t adc_values[NUM_KEYS];
+volatile uint16_t adc_values[NUM_KEYS];
 
 void analog_init(void) {
   // Enable peripheral clocks
@@ -228,13 +228,9 @@ void analog_init(void) {
     ;
 }
 
-void analog_task(void) {}
-
 static volatile uint32_t analog_sweep_count = 0;
 
 uint32_t analog_get_sweep_count(void) { return analog_sweep_count; }
-
-uint16_t analog_read(uint8_t key) { return adc_values[key]; }
 
 //--------------------------------------------------------------------+
 // Interrupt Handlers

@@ -49,7 +49,7 @@ ATTR_NONCACHEABLE
 static volatile uint32_t adc_dma_buf[ADC_TOTAL_INPUTS];
 
 // Processed 16-bit results indexed by key number
-static volatile uint16_t adc_values[NUM_KEYS];
+volatile uint16_t adc_values[NUM_KEYS];
 
 // Set to true once the first DMA transfer completes
 static volatile bool adc_initialized = false;
@@ -198,12 +198,7 @@ void analog_init(void) {
   while (!adc_initialized);
 }
 
-void analog_task(void) {
-  // DMA transfers results continuously; no polling needed here.
-  // The DMA ISR retriggers the ADC after each completed sequence.
-}
 
-uint16_t analog_read(uint8_t key) { return adc_values[key]; }
 
 // --------------------------------------------------------------------
 // Interrupt Handlers

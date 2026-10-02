@@ -228,8 +228,9 @@ void advanced_key_init(void) {}
 
 void advanced_key_clear(void) {
   // Release any keys that are currently pressed
+  const advanced_key_t *advanced_keys = CURRENT_PROFILE.advanced_keys;
   for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
-    const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
+    const advanced_key_t *ak = &advanced_keys[i];
     const advanced_key_state_t *state = &ak_states[i];
 
     switch (ak->type) {
@@ -278,8 +279,9 @@ void advanced_key_process(const advanced_key_event_t *event) {
 }
 
 void advanced_key_tick(bool has_non_tap_hold_press) {
+  const advanced_key_t *advanced_keys = CURRENT_PROFILE.advanced_keys;
   for (uint32_t i = 0; i < NUM_ADVANCED_KEYS; i++) {
-    const advanced_key_t *ak = &CURRENT_PROFILE.advanced_keys[i];
+    const advanced_key_t *ak = &advanced_keys[i];
     advanced_key_state_t *state = &ak_states[i];
 
     switch (ak->type) {

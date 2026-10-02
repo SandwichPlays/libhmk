@@ -79,7 +79,6 @@ static uint16_t stable_ref[NUM_KEYS] = {0};
 static uint16_t hyst_gap[NUM_KEYS] = {0};
 static uint16_t raw_boot_rest[NUM_KEYS] = {0};
 static uint16_t last_raw_val[NUM_KEYS] = {0};
-static volatile bool matrix_state_changed = false;
 
 void matrix_update_calibration(void) {
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
@@ -458,7 +457,6 @@ void matrix_scan(void) {
       if (!next_pressed || now - key_matrix[i].last_state_change_time >= debounce_time) {
         key_matrix[i].is_pressed = next_pressed;
         key_matrix[i].last_state_change_time = now;
-        matrix_state_changed = true;
       }
     }
   }
@@ -472,15 +470,7 @@ void matrix_trigger_virtual_key(uint8_t key, bool is_pressed) {
   if (key < NUM_KEYS) {
     if (key_matrix[key].is_pressed != is_pressed) {
       key_matrix[key].is_pressed = is_pressed;
-      matrix_state_changed = true;
     }
   }
 }
 
-bool matrix_has_changed(void) {
-  if (matrix_state_changed) {
-    matrix_state_changed = false;
-    return true;
-  }
-  return false;
-}

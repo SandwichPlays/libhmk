@@ -190,9 +190,3 @@ void matrix_disable_rapid_trigger(uint8_t key, bool disable);
  */
 void matrix_trigger_virtual_key(uint8_t key, bool is_pressed);
 
-/**
- * @brief Check if any key press state has changed since the last check
- *
- * @return True if a key state changed, false otherwise
- */
-bool matrix_has_changed(void);
