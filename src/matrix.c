@@ -75,6 +75,7 @@ static uint8_t manual_calib_dir[NUM_KEYS] = {0};
 static uint16_t manual_calib_peak[NUM_KEYS] = {0};
 
 static uint32_t stable_timer[NUM_KEYS] = {0};
+static uint16_t stable_ref[NUM_KEYS] = {0};
 static uint16_t hyst_gap[NUM_KEYS] = {0};
 static uint16_t raw_boot_rest[NUM_KEYS] = {0};
 static uint16_t last_raw_val[NUM_KEYS] = {0};
@@ -126,6 +127,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     raw_boot_rest[i] = analog_read(i);
     last_raw_val[i] = raw_boot_rest[i];
+    stable_ref[i] = raw_boot_rest[i];
     key_matrix[i].adc_rest_value = key_matrix[i].adc_filtered;
     key_matrix[i].distance = 0;
     key_matrix[i].extremum = 0;
@@ -283,15 +285,16 @@ void matrix_scan(void) {
     uint16_t new_adc_filtered = EMA(effective_raw, prev_filtered);
     key_matrix[i].adc_filtered = new_adc_filtered;
 
-    // Stability baseline tracking (only when key is completely released and idle)
-    int32_t diff = (int32_t)new_adc_filtered - (int32_t)prev_filtered;
-    if (diff < -3 || diff > 3) {
+    // Stability baseline tracking (only when key is completely released and idle for >= 5s)
+    if (key_matrix[i].is_pressed || key_matrix[i].distance > 0 || manual_calib_active) {
+      stable_ref[i] = raw_val;
       stable_timer[i] = now;
     } else {
-      if (now - stable_timer[i] >= 30) {
-        if (!key_matrix[i].is_pressed && key_matrix[i].distance == 0 &&
-            !manual_calib_active &&
-            new_adc_filtered < key_matrix[i].adc_rest_value) {
+      if (abs((int32_t)raw_val - (int32_t)stable_ref[i]) > 2) {
+        stable_ref[i] = raw_val;
+        stable_timer[i] = now;
+      } else if (now - stable_timer[i] >= MATRIX_REST_STABILITY_TIME_MS) {
+        if (new_adc_filtered != key_matrix[i].adc_rest_value) {
           key_matrix[i].adc_rest_value = new_adc_filtered;
           if (manual_calib_status[i] == CALIB_STATE_IDLE) {
             key_matrix[i].adc_bottom_out_value =
@@ -299,6 +302,8 @@ void matrix_scan(void) {
             matrix_update_lenience(i);
           }
         }
+        stable_timer[i] = now;
+        stable_ref[i] = raw_val;
       }
     }
 

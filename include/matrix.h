@@ -43,10 +43,12 @@
 #define MATRIX_DEBOUNCE_MS 2
 #endif
 
-#if !defined(MATRIX_REST_LENIENCE)
-// Fixed ADC count offset added to adc_rest_value to guard against resting noise
-#define MATRIX_REST_LENIENCE 2
+#if !defined(MATRIX_REST_STABILITY_TIME_MS)
+// Stillness duration in milliseconds required before adapting rest value (5 seconds)
+#define MATRIX_REST_STABILITY_TIME_MS 5000
 #endif
+
+
 
 //--------------------------------------------------------------------+
 // Key Matrix
