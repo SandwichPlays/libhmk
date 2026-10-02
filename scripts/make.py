@@ -27,9 +27,22 @@ driver_name = kb_json.hardware.driver
 # Add source filter for driver source files
 env.Append(SRC_FILTER=["-<hardware/>", f"+<hardware/{driver_name}/>"])
 
+# Unflag size optimization and prioritize high-performance speed optimization
+env.ProcessUnFlags("-Os")
+env.Append(CCFLAGS=[
+    "-O3",
+    "-fomit-frame-pointer",
+    "-flto",
+    "-funroll-loops",
+    "-falign-functions=4",
+    "-falign-loops=4",
+    "-ffast-math",
+    "-fno-math-errno",
+])
+env.Append(LINKFLAGS=["-flto", "-O3", "-funroll-loops"])
+
 # Build Flags
 build_flags = utils.CompilerFlags()
-build_flags.flags.append("-O2")
 
 # Include headers. We prioritize including driver and keyboard headers.
 build_flags.include(f"hardware/{driver_name}")

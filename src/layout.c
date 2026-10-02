@@ -134,6 +134,7 @@ void layout_task(void) {
 
   const uint8_t current_layer = layout_get_current_layer();
   const bool xinput_active = (current_layer == 0) && eeconfig->options.xinput_enabled;
+  const eeconfig_profile_t *profile = &CURRENT_PROFILE;
   bool has_non_tap_hold_press = false;
 
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
@@ -143,22 +144,22 @@ void layout_task(void) {
     // Fast path: skip idle keys entirely.
     // When XInput is off (or key has no gamepad mapping), released keys contribute nothing.
     if (!k->is_pressed && !last_key_press &&
-        (!xinput_active || CURRENT_PROFILE.gamepad_buttons[i] == GP_BUTTON_NONE))
+        (!xinput_active || profile->gamepad_buttons[i] == GP_BUTTON_NONE))
       continue;
 
     if (xinput_active) {
       // XInput key only applies to layer 0. We process it first since the
       // subsequent key processing may be skipped due to the gamepad options.
-      if (CURRENT_PROFILE.gamepad_buttons[i] != GP_BUTTON_NONE) {
+      if (profile->gamepad_buttons[i] != GP_BUTTON_NONE) {
         xinput_process(i);
 
-        if (CURRENT_PROFILE.gamepad_options.gamepad_override)
+        if (profile->gamepad_options.gamepad_override)
           // If the key is mapped to a gamepad button, and the gamepad override
           // is enabled, we skip the key processing.
           continue;
       }
 
-      if (!CURRENT_PROFILE.gamepad_options.keyboard_enabled)
+      if (!profile->gamepad_options.keyboard_enabled)
         // If the keyboard is disabled for this profile, we skip the key
         // processing.
         continue;
@@ -183,7 +184,7 @@ void layout_task(void) {
         };
         advanced_key_process(&ak_event);
         has_non_tap_hold_press |=
-            (CURRENT_PROFILE.advanced_keys[ak_index - 1].type !=
+            (profile->advanced_keys[ak_index - 1].type !=
              AK_TYPE_TAP_HOLD);
       } else {
         active_keycodes[i] = keycode;
