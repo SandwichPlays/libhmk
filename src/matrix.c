@@ -127,7 +127,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     raw_boot_rest[i] = analog_read(i);
     last_raw_val[i] = raw_boot_rest[i];
-    stable_ref[i] = raw_boot_rest[i];
+    stable_ref[i] = key_matrix[i].adc_filtered;
     key_matrix[i].adc_rest_value = key_matrix[i].adc_filtered;
     key_matrix[i].distance = 0;
     key_matrix[i].extremum = 0;
@@ -285,25 +285,27 @@ void matrix_scan(void) {
     uint16_t new_adc_filtered = EMA(effective_raw, prev_filtered);
     key_matrix[i].adc_filtered = new_adc_filtered;
 
-    // Stability baseline tracking (only when key is completely released and idle for >= 5s)
-    if (key_matrix[i].is_pressed || key_matrix[i].distance > 0 || manual_calib_active) {
-      stable_ref[i] = raw_val;
+    // Stability auto-baseline recovery (only when key reading drops below rest)
+    if (key_matrix[i].is_pressed || manual_calib_active) {
+      stable_ref[i] = new_adc_filtered;
       stable_timer[i] = now;
     } else {
-      if (abs((int32_t)raw_val - (int32_t)stable_ref[i]) > 2) {
-        stable_ref[i] = raw_val;
+      if (abs((int32_t)new_adc_filtered - (int32_t)stable_ref[i]) > 2) {
+        stable_ref[i] = new_adc_filtered;
         stable_timer[i] = now;
-      } else if (now - stable_timer[i] >= MATRIX_REST_STABILITY_TIME_MS) {
-        if (new_adc_filtered != key_matrix[i].adc_rest_value) {
+      } else if (new_adc_filtered < key_matrix[i].adc_rest_value) {
+        if (now - stable_timer[i] >= MATRIX_BASELINE_DOWN_TIME_MS) {
           key_matrix[i].adc_rest_value = new_adc_filtered;
           if (manual_calib_status[i] == CALIB_STATE_IDLE) {
             key_matrix[i].adc_bottom_out_value =
                 matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
             matrix_update_lenience(i);
           }
+          stable_timer[i] = now;
+          stable_ref[i] = new_adc_filtered;
         }
+      } else {
         stable_timer[i] = now;
-        stable_ref[i] = raw_val;
       }
     }
 
@@ -381,10 +383,8 @@ void matrix_scan(void) {
 
       if (dist <= top_dz) {
         key_matrix[i].extremum = dist;
-        if (!key_matrix[i].is_pressed || dist <= deact_point) {
-          key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-          next_pressed = false;
-        }
+        key_matrix[i].key_dir = KEY_DIR_INACTIVE;
+        next_pressed = false;
       } else if (dist >= bot_limit) {
         key_matrix[i].extremum = dist;
         key_matrix[i].key_dir = KEY_DIR_DOWN;
@@ -406,6 +406,8 @@ void matrix_scan(void) {
             key_matrix[i].extremum = dist;
             key_matrix[i].key_dir = KEY_DIR_DOWN;
             next_pressed = true;
+          } else if (dist <= deact_point) {
+            next_pressed = false;
           }
           break;
 
@@ -451,9 +453,9 @@ void matrix_scan(void) {
       }
     }
 
-    // Lockout Debounce
+    // Lockout Debounce (only applies to press)
     if (next_pressed != key_matrix[i].is_pressed) {
-      if (now - key_matrix[i].last_state_change_time >= debounce_time) {
+      if (!next_pressed || now - key_matrix[i].last_state_change_time >= debounce_time) {
         key_matrix[i].is_pressed = next_pressed;
         key_matrix[i].last_state_change_time = now;
         matrix_state_changed = true;

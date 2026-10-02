@@ -250,9 +250,9 @@ static void generate_desc_configuration(uint8_t *dst) {
   uint8_t polling_interval = 1;
 #if defined(BOARD_USB_HS)
   if (!eeconfig->options.high_polling_rate_enabled)
-    // If high polling rate is not enabled, use 1kHz polling rate = 8 frames for
-    // USB HS instead.
-    polling_interval = 8;
+    // If high polling rate is not enabled, use 1kHz polling rate = 8 microframes for
+    // USB HS instead (bInterval = 4 gives 2^(4-1) = 8 microframes = 1ms).
+    polling_interval = 4;
 #endif
 
   const uint8_t src[] = {
@@ -267,11 +267,11 @@ static void generate_desc_configuration(uint8_t *dst) {
       TUD_HID_DESCRIPTOR(USB_ITF_HID, 0, HID_ITF_PROTOCOL_NONE,
                          sizeof(desc_hid_report), EP_IN_ADDR_HID,
                          CFG_TUD_HID_EP_BUFSIZE, polling_interval),
-      // Raw HID interface descriptor
+      // Raw HID interface descriptor (always fast for responsive configurator streaming)
       TUD_HID_INOUT_DESCRIPTOR(USB_ITF_RAW_HID, 0, HID_ITF_PROTOCOL_NONE,
                                sizeof(desc_raw_hid_report), EP_OUT_ADDR_RAW_HID,
                                EP_IN_ADDR_RAW_HID, RAW_HID_EP_SIZE,
-                               polling_interval),
+                               1),
       // XInput interface descriptor
       XINPUT_DESCRIPTOR(USB_ITF_XINPUT, 0, EP_OUT_ADDR_XINPUT,
                         EP_IN_ADDR_XINPUT, polling_interval),

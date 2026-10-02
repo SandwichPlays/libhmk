@@ -43,9 +43,9 @@
 #define MATRIX_DEBOUNCE_MS 2
 #endif
 
-#if !defined(MATRIX_REST_STABILITY_TIME_MS)
-// Stillness duration in milliseconds required before adapting rest value (5 seconds)
-#define MATRIX_REST_STABILITY_TIME_MS 5000
+#if !defined(MATRIX_BASELINE_DOWN_TIME_MS)
+// Fast auto-baseline recovery duration for downward shifts / boot-held keys (20ms)
+#define MATRIX_BASELINE_DOWN_TIME_MS 20
 #endif
 
 
