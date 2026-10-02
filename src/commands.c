@@ -326,8 +326,11 @@ void command_process(const uint8_t *buf) {
   // Echo the command ID back to the host if successful
   out->command_id = success ? in->command_id : COMMAND_UNKNOWN;
 
-  while (!tud_hid_n_ready(USB_ITF_RAW_HID))
-    // Wait for the raw HID interface to be ready
+  const uint32_t wait_start = timer_read();
+  while (!tud_hid_n_ready(USB_ITF_RAW_HID)) {
+    if (timer_elapsed(wait_start) >= 10)
+      return;
     tud_task();
+  }
   tud_hid_n_report(USB_ITF_RAW_HID, 0, out_buf, RAW_HID_EP_SIZE);
 }

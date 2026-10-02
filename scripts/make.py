@@ -29,6 +29,7 @@ env.Append(SRC_FILTER=["-<hardware/>", f"+<hardware/{driver_name}/>"])
 
 # Build Flags
 build_flags = utils.CompilerFlags()
+build_flags.flags.append("-O2")
 
 # Include headers. We prioritize including driver and keyboard headers.
 build_flags.include(f"hardware/{driver_name}")

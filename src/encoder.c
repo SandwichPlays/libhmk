@@ -125,10 +125,13 @@ void encoder_task(void) {
   uint32_t now = timer_read();
 
   // Release any rotation keys whose hold time has expired
-  for (uint32_t k = 0; k < NUM_KEYS; k++) {
-    if (encoder_key_release_times[k] != 0 && now >= encoder_key_release_times[k]) {
-      matrix_trigger_virtual_key(k, false);
-      encoder_key_release_times[k] = 0;
+  for (uint32_t i = 0; i < ENCODER_COUNT; i++) {
+    for (uint32_t j = 0; j < 2; j++) {
+      const uint8_t k = encoder_keys[i][j];
+      if (k < NUM_KEYS && encoder_key_release_times[k] != 0 && now >= encoder_key_release_times[k]) {
+        matrix_trigger_virtual_key(k, false);
+        encoder_key_release_times[k] = 0;
+      }
     }
   }
 

@@ -48,6 +48,14 @@
 #define MATRIX_BASELINE_DOWN_TIME_MS 20
 #endif
 
+#if ADC_NUM_MUX_INPUTS > 0
+#define MATRIX_NUM_ANALOG_KEYS NUM_KEYS
+#elif defined(ADC_NUM_RAW_INPUTS)
+#define MATRIX_NUM_ANALOG_KEYS ADC_NUM_RAW_INPUTS
+#else
+#define MATRIX_NUM_ANALOG_KEYS NUM_KEYS
+#endif
+
 
 
 //--------------------------------------------------------------------+

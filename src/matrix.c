@@ -235,10 +235,10 @@ uint8_t matrix_get_calibration_status(uint8_t key) {
 void matrix_scan(void) {
   const uint32_t now = timer_read();
   const uint32_t debounce_time = eeconfig->options.debounce_ms;
-
+  const actuation_t *actuation_map = CURRENT_PROFILE.actuation_map;
 
   // Only scan keys that are connected to analog inputs
-  for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS; i++) {
+  for (uint32_t i = 0; i < MATRIX_NUM_ANALOG_KEYS; i++) {
     const uint16_t raw_current = analog_read(i);
 
     // Dynamic polarity auto-detection for uncalibrated keys
@@ -273,7 +273,7 @@ void matrix_scan(void) {
     raw_val = ADC_MAX_VALUE - raw_val;
 #endif
     const uint16_t prev_filtered = key_matrix[i].adc_filtered;
-    const actuation_t *actuation = &CURRENT_PROFILE.actuation_map[i];
+    const actuation_t *actuation = &actuation_map[i];
 
     // Run-length persistence filter: eliminate single-sample comparator toggle
     uint16_t effective_raw = prev_filtered;
