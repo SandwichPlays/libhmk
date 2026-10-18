@@ -39,6 +39,15 @@ void layout_init(void);
 void layout_load_advanced_keys(void);
 
 /**
+ * @brief Set current profile
+ *
+ * @param profile Profile index
+ *
+ * @return true if successful, false otherwise
+ */
+bool layout_set_profile(uint8_t profile);
+
+/**
  * @brief Layout task
  *
  * @return None

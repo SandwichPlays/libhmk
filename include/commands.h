@@ -17,6 +17,7 @@
 
 #include "common.h"
 #include "eeconfig.h"
+#include "scan_rate.h"
 #include "usb_descriptors.h"
 
 //--------------------------------------------------------------------+
@@ -42,6 +43,8 @@ typedef enum {
   COMMAND_SAVE_CALIBRATION_THRESHOLD,
   COMMAND_START_MANUAL_CALIBRATION,
   COMMAND_FINISH_MANUAL_CALIBRATION,
+  COMMAND_SET_PROFILE,
+  COMMAND_SCAN_RATE = 23,
 
   COMMAND_GET_KEYMAP = 128,
   COMMAND_SET_KEYMAP,
@@ -70,6 +73,10 @@ typedef struct __attribute__((packed)) {
 typedef eeconfig_calibration_t command_in_calibration_t;
 
 typedef eeconfig_options_t command_in_options_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t profile;
+} command_in_set_profile_t;
 
 typedef struct __attribute__((packed)) {
   uint8_t profile;
@@ -139,6 +146,7 @@ typedef struct __attribute__((packed)) {
     command_in_analog_info_t analog_info;
     command_in_calibration_t calibration;
     command_in_options_t options;
+    command_in_set_profile_t set_profile;
     command_in_reset_profile_t reset_profile;
     command_in_duplicate_profile_t duplicate_profile;
     command_in_metadata_t metadata;
@@ -203,6 +211,8 @@ typedef struct __attribute__((packed)) {
     uint8_t gamepad_buttons[63];
     // For `COMMAND_GET_GAMEPAD_OPTIONS`
     gamepad_options_t gamepad_options;
+    // For `COMMAND_SCAN_RATE`
+    scan_rate_t scan_rate;
   };
 } command_out_buffer_t;
 

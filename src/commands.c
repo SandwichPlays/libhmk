@@ -107,6 +107,14 @@ void command_process(const uint8_t *buf) {
     out->current_profile = eeconfig->current_profile;
     break;
   }
+  case COMMAND_SET_PROFILE: {
+    const command_in_set_profile_t *p = &in->set_profile;
+
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+
+    success = layout_set_profile(p->profile);
+    break;
+  }
   case COMMAND_GET_OPTIONS: {
     out->options = eeconfig->options;
     break;
@@ -314,6 +322,10 @@ void command_process(const uint8_t *buf) {
 
     success = EECONFIG_WRITE(profiles[p->profile].gamepad_options,
                              &p->gamepad_options);
+    break;
+  }
+  case COMMAND_SCAN_RATE: {
+    scan_rate_get(&out->scan_rate);
     break;
   }
   default: {

@@ -258,7 +258,7 @@ void layout_task(void) {
  *
  * @return true if successful, false otherwise
  */
-static bool layout_set_profile(uint8_t profile) {
+bool layout_set_profile(uint8_t profile) {
   if (profile >= NUM_PROFILES)
     return false;
 

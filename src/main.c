@@ -26,6 +26,7 @@
 #include "wear_leveling.h"
 #include "xinput.h"
 #include "encoder.h"
+#include "scan_rate.h"
 
 int main(void) {
   // Initialize the hardware
@@ -47,6 +48,7 @@ int main(void) {
   xinput_init();
   layout_init();
   command_init();
+  scan_rate_init();
 #if defined(ENCODER_ENABLE)
   encoder_init();
 #endif
@@ -58,6 +60,7 @@ int main(void) {
 
     analog_task();
     matrix_scan();
+    scan_rate_task();
     layout_task();
     xinput_task();
 #if defined(ENCODER_ENABLE)
