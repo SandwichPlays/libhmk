@@ -107,7 +107,11 @@ void encoder_init(void) {
     
     // Configure hardware quadrature decoding (both channels)
     tmr_encoder_mode_config(tmr, TMR_ENCODER_MODE_C, TMR_INPUT_RISING_EDGE, TMR_INPUT_RISING_EDGE);
-    
+
+    // Enable hardware digital filter on both channels to filter out mechanical contact bounce
+    tmr->cm1_input_bit.c1df = 0x0F;
+    tmr->cm1_input_bit.c2df = 0x0F;
+
     // Explicitly enable input capture channels
     tmr_channel_enable(tmr, TMR_SELECT_CHANNEL_1, TRUE);
     tmr_channel_enable(tmr, TMR_SELECT_CHANNEL_2, TRUE);
@@ -119,41 +123,59 @@ void encoder_init(void) {
   }
 }
 
+static uint16_t encoder_pulse_queue[NUM_KEYS];
 static uint32_t encoder_key_release_times[NUM_KEYS];
+static uint32_t encoder_key_next_press_times[NUM_KEYS];
 
 void encoder_task(void) {
   uint32_t now = timer_read();
 
-  // Release any rotation keys whose hold time has expired
+  // 1. Accumulate rotation delta and enqueue pulses
   for (uint32_t i = 0; i < ENCODER_COUNT; i++) {
-    for (uint32_t j = 0; j < 2; j++) {
-      const uint8_t k = encoder_keys[i][j];
-      if (k < NUM_KEYS && encoder_key_release_times[k] != 0 && now >= encoder_key_release_times[k]) {
-        matrix_trigger_virtual_key(k, false);
-        encoder_key_release_times[k] = 0;
+    tmr_type *tmr = encoder_timers[i];
+    int16_t current_value = (int16_t)tmr_counter_value_get(tmr);
+    int16_t delta = current_value - last_encoder_values[i];
+    int16_t res = encoder_resolutions[i] > 0 ? encoder_resolutions[i] : 4;
+    int16_t steps = delta / res;
+
+    if (steps != 0) {
+      last_encoder_values[i] += steps * res;
+      if (steps > 0) {
+        uint8_t key = encoder_keys[i][1]; // CW
+        if (key < NUM_KEYS) {
+          encoder_pulse_queue[key] += steps;
+        }
+      } else {
+        uint8_t key = encoder_keys[i][0]; // CCW
+        if (key < NUM_KEYS) {
+          encoder_pulse_queue[key] += (uint16_t)(-steps);
+        }
       }
     }
   }
 
+  // 2. Dispatch queued pulses with discrete press/release intervals
   for (uint32_t i = 0; i < ENCODER_COUNT; i++) {
-    // 1. Process encoder rotation (hardware timer based)
-    tmr_type *tmr = encoder_timers[i];
-    int16_t current_value = tmr_counter_value_get(tmr);
-    int16_t delta = current_value - last_encoder_values[i];
+    for (uint32_t j = 0; j < 2; j++) {
+      const uint8_t k = encoder_keys[i][j];
+      if (k >= NUM_KEYS) continue;
 
-    if (delta >= encoder_resolutions[i]) {
-      uint8_t key = encoder_keys[i][1];
-      matrix_trigger_virtual_key(key, true);
-      encoder_key_release_times[key] = now + 15; // Hold for 15ms
-      last_encoder_values[i] = current_value;
-    } else if (delta <= -encoder_resolutions[i]) {
-      uint8_t key = encoder_keys[i][0];
-      matrix_trigger_virtual_key(key, true);
-      encoder_key_release_times[key] = now + 15; // Hold for 15ms
-      last_encoder_values[i] = current_value;
+      if (encoder_key_release_times[k] != 0) {
+        if (now >= encoder_key_release_times[k]) {
+          matrix_trigger_virtual_key(k, false);
+          encoder_key_release_times[k] = 0;
+          encoder_key_next_press_times[k] = now + 4; // 4ms gap before next pulse
+        }
+      } else if (encoder_pulse_queue[k] > 0 && now >= encoder_key_next_press_times[k]) {
+        encoder_pulse_queue[k]--;
+        matrix_trigger_virtual_key(k, true);
+        encoder_key_release_times[k] = now + 6; // 6ms pulse hold
+      }
     }
+  }
 
-    // 2. Process encoder button with debounce
+  // 3. Process encoder button with debounce
+  for (uint32_t i = 0; i < ENCODER_COUNT; i++) {
     if (encoder_button_ports[i] != NULL) {
       bool current_pin_state = gpio_input_data_bit_read(encoder_button_ports[i], encoder_button_pins[i]);
       if (current_pin_state != debounced_button_states[i]) {

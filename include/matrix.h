@@ -164,6 +164,14 @@ void matrix_update_calibration(void);
 bool matrix_is_key_inverted(uint8_t key);
 
 /**
+ * @brief Get the unfiltered raw ADC reading of a key
+ *
+ * @param key Key index
+ * @return Raw ADC reading (polarity-corrected)
+ */
+uint16_t matrix_get_raw_adc(uint8_t key);
+
+/**
  * @brief Update the key matrix to reflect the current state of the keys
  *
  * @return None

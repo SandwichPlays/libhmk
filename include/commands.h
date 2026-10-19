@@ -68,6 +68,7 @@ typedef enum {
 
 typedef struct __attribute__((packed)) {
   uint8_t offset;
+  uint8_t raw;
 } command_in_analog_info_t;
 
 typedef eeconfig_calibration_t command_in_calibration_t;

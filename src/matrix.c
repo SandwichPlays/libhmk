@@ -231,6 +231,12 @@ uint8_t matrix_get_calibration_status(uint8_t key) {
   return CALIB_STATE_IDLE;
 }
 
+uint16_t matrix_get_raw_adc(uint8_t key) {
+  if (key < NUM_KEYS)
+    return last_raw_val[key];
+  return 0;
+}
+
 void matrix_scan(void) {
   const uint32_t now = timer_read();
   const uint32_t debounce_time = eeconfig->options.debounce_ms;
@@ -380,11 +386,7 @@ void matrix_scan(void) {
       const uint16_t bot_dz = actuation->rt_deadzone_bottom;
       const uint16_t bot_limit = (bot_dz < 10000) ? (10000 - bot_dz) : 10000;
 
-      if (dist <= top_dz) {
-        key_matrix[i].extremum = dist;
-        key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-        next_pressed = false;
-      } else if (dist >= bot_limit) {
+      if (dist >= bot_limit) {
         key_matrix[i].extremum = dist;
         key_matrix[i].key_dir = KEY_DIR_DOWN;
         next_pressed = true;
@@ -394,9 +396,7 @@ void matrix_scan(void) {
         const uint16_t rt_up =
             actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
         const uint16_t rt_active_min =
-            (actuation->actuation_point + gap < 10000)
-                ? (actuation->actuation_point + gap)
-                : 10000;
+            M_MAX((uint32_t)actuation->actuation_point + gap, top_dz);
 
         switch (key_matrix[i].key_dir) {
         case KEY_DIR_INACTIVE:
@@ -418,7 +418,7 @@ void matrix_scan(void) {
             next_pressed = false;
           } else if (key_matrix[i].extremum >= rt_active_min &&
                      dist + rt_up < key_matrix[i].extremum) {
-            // Released by Rapid Trigger (only once pressed past actuation + hyst_gap)
+            // Released by Rapid Trigger (only once pressed past actuation + hyst_gap and top_dz)
             key_matrix[i].extremum = dist;
             key_matrix[i].key_dir = KEY_DIR_UP;
             next_pressed = false;
@@ -434,9 +434,10 @@ void matrix_scan(void) {
             key_matrix[i].extremum = dist;
             key_matrix[i].key_dir = KEY_DIR_INACTIVE;
             next_pressed = false;
-          } else if (key_matrix[i].extremum + actuation->rt_down < dist &&
+          } else if (dist > top_dz &&
+                     key_matrix[i].extremum + actuation->rt_down < dist &&
                      (actuation->continuous || dist >= actuation->actuation_point)) {
-            // Re-pressed by Rapid Trigger
+            // Re-pressed by Rapid Trigger (only outside top deadzone)
             key_matrix[i].extremum = dist;
             key_matrix[i].key_dir = KEY_DIR_DOWN;
             next_pressed = true;

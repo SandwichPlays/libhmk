@@ -72,7 +72,8 @@ void command_process(const uint8_t *buf) {
     for (uint32_t i = 0;
          i < M_ARRAY_SIZE(out->analog_info) && i + p->offset < NUM_KEYS; i++) {
       const uint8_t key_idx = i + p->offset;
-      o[i].adc_value = key_matrix[key_idx].adc_filtered;
+      o[i].adc_value =
+          p->raw ? matrix_get_raw_adc(key_idx) : key_matrix[key_idx].adc_filtered;
       o[i].distance = key_matrix[key_idx].distance;
       uint8_t status = matrix_get_calibration_status(key_idx);
       if (key_matrix[key_idx].is_pressed) {
