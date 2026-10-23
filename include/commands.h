@@ -44,6 +44,8 @@ typedef enum {
   COMMAND_START_MANUAL_CALIBRATION,
   COMMAND_FINISH_MANUAL_CALIBRATION,
   COMMAND_SET_PROFILE,
+  COMMAND_GET_SWITCH_LUT,
+  COMMAND_SET_SWITCH_LUT,
   COMMAND_SCAN_RATE = 23,
 
   COMMAND_GET_KEYMAP = 128,
@@ -140,6 +142,22 @@ typedef struct __attribute__((packed)) {
   uint8_t save;
 } command_in_finish_manual_calib_t;
 
+typedef struct __attribute__((packed)) {
+  // Chunk index (each chunk holds SWITCH_LUT_CHUNK_SIZE entries)
+  uint8_t chunk;
+} command_in_get_switch_lut_t;
+
+#define SWITCH_LUT_CHUNK_SIZE 30
+
+typedef struct __attribute__((packed)) {
+  // Chunk index
+  uint8_t chunk;
+  // Number of entries in this chunk (0..SWITCH_LUT_CHUNK_SIZE)
+  uint8_t count;
+  uint8_t _reserved;
+  uint16_t values[SWITCH_LUT_CHUNK_SIZE];
+} command_in_set_switch_lut_t;
+
 // Command input buffer type
 typedef struct __attribute__((packed)) {
   uint8_t command_id;
@@ -160,6 +178,8 @@ typedef struct __attribute__((packed)) {
     command_in_gamepad_options_t gamepad_options;
     command_in_start_manual_calib_t start_manual_calib;
     command_in_finish_manual_calib_t finish_manual_calib;
+    command_in_get_switch_lut_t get_switch_lut;
+    command_in_set_switch_lut_t set_switch_lut;
   };
 } command_in_buffer_t;
 
@@ -214,6 +234,12 @@ typedef struct __attribute__((packed)) {
     gamepad_options_t gamepad_options;
     // For `COMMAND_SCAN_RATE`
     scan_rate_t scan_rate;
+    // For `COMMAND_GET_SWITCH_LUT`
+    struct __attribute__((packed)) {
+      uint8_t count;
+      uint8_t _reserved;
+      uint16_t values[SWITCH_LUT_CHUNK_SIZE];
+    } switch_lut;
   };
 } command_out_buffer_t;
 

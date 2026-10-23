@@ -50,6 +50,10 @@ static bool v1_8_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_8_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
 
+static bool v1_9_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_9_profile_config_func(uint8_t profile, uint8_t *dst,
+                                     const uint8_t *src);
+
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
 static const migration_t migrations[] = {
@@ -180,6 +184,22 @@ static const migration_t migrations[] = {
         .global_config_func = v1_8_global_config_func,
         .profile_config_func = v1_8_profile_config_func,
     },
+    {
+        .version = 0x0109,
+        .global_config_size = 14             // Other fields
+                               + NUM_KEYS * 3 // Bottom-out threshold and switch_travel
+                               + DISTANCE_LUT_SIZE * sizeof(uint16_t) // Distance LUT
+        ,
+        .profile_config_size = NUM_LAYERS * NUM_KEYS    // Keymap
+                               + NUM_KEYS * 11          // Actuation map (16-bit + deadzones)
+                               + NUM_ADVANCED_KEYS * 13 // Advanced keys (16-bit bottom-out, 13 bytes each)
+                               + NUM_KEYS               // Gamepad buttons
+                               + 9                      // Gamepad options
+                               + 1                      // Tick rate
+        ,
+        .global_config_func = v1_9_global_config_func,
+        .profile_config_func = v1_9_profile_config_func,
+    },
 };
 
 bool migration_try_migrate(void) {
@@ -190,7 +210,7 @@ bool migration_try_migrate(void) {
   const uint16_t config_version = eeconfig->version;
   // We alternate between two buffers to save the memory.
   uint8_t current_buf = 0;
-  uint8_t bufs[2][sizeof(eeconfig_t)];
+  static uint8_t bufs[2][sizeof(eeconfig_t)];
 
   // Let `bufs[0]` be the current configuration.
   memcpy(bufs[0], eeconfig, sizeof(eeconfig_t));
@@ -588,5 +608,33 @@ bool v1_8_profile_config_func(uint8_t profile, uint8_t *dst,
   // 4. Copy Gamepad buttons, Gamepad options, Tick rate
   migration_memcpy(&dst, &src, NUM_KEYS + 9 + 1);
 
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.8 -> v1.9 Migration
+//--------------------------------------------------------------------+
+
+bool v1_9_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0108)
+    // Expected version v1.8
+    return false;
+
+  // Copy existing global fields directly (14 + NUM_KEYS * 3)
+  migration_memcpy(&dst, &src, 14 + NUM_KEYS * 3);
+
+  // Initialize distance_lut with default table
+  memcpy(dst, distance_lut_default, DISTANCE_LUT_SIZE * sizeof(uint16_t));
+  dst += DISTANCE_LUT_SIZE * sizeof(uint16_t);
+
+  return true;
+}
+
+bool v1_9_profile_config_func(uint8_t profile, uint8_t *dst,
+                              const uint8_t *src) {
+  // Profiles did not change between v1.8 and v1.9, copy directly
+  migration_memcpy(&dst, &src,
+                   NUM_LAYERS * NUM_KEYS + NUM_KEYS * 11 +
+                       NUM_ADVANCED_KEYS * 13 + NUM_KEYS + 9 + 1);
   return true;
 }

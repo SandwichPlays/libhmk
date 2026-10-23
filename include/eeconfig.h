@@ -16,6 +16,7 @@
 #pragma once
 
 #include "common.h"
+#include "distance.h"
 #include "wear_leveling.h"
 
 //--------------------------------------------------------------------+
@@ -81,7 +82,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0108
+#define EECONFIG_VERSION 0x0109
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -105,6 +106,9 @@ typedef struct __attribute__((packed)) {
   uint8_t current_profile;
   // Last non-default profile index, used for profile swapping
   uint8_t last_non_default_profile;
+
+  // Distance lookup table
+  uint16_t distance_lut[DISTANCE_LUT_SIZE];
   // End of global configurations
 
   // Profiles

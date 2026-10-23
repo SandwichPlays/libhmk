@@ -33,7 +33,10 @@
 static uint8_t out_buf[RAW_HID_EP_SIZE];
 static const uint8_t keyboard_metadata[] = {KEYBOARD_METADATA};
 
-void command_init(void) {}
+void command_init(void) {
+  distance_lut_init();
+}
+
 
 void command_process(const uint8_t *buf) {
   const command_in_buffer_t *in = (const command_in_buffer_t *)buf;
@@ -56,6 +59,7 @@ void command_process(const uint8_t *buf) {
   case COMMAND_FACTORY_RESET: {
     advanced_key_clear();
     success = eeconfig_reset();
+    distance_lut_init();
     layout_load_advanced_keys();
     break;
   }
@@ -323,6 +327,36 @@ void command_process(const uint8_t *buf) {
 
     success = EECONFIG_WRITE(profiles[p->profile].gamepad_options,
                              &p->gamepad_options);
+    break;
+  }
+  case COMMAND_GET_SWITCH_LUT: {
+    const command_in_get_switch_lut_t *p = &in->get_switch_lut;
+
+    const uint32_t offset = (uint32_t)p->chunk * SWITCH_LUT_CHUNK_SIZE;
+    COMMAND_VERIFY(offset < DISTANCE_LUT_SIZE);
+
+    const uint32_t remaining = DISTANCE_LUT_SIZE - offset;
+    const uint32_t count =
+        remaining < SWITCH_LUT_CHUNK_SIZE ? remaining : SWITCH_LUT_CHUNK_SIZE;
+
+    out->switch_lut.count = (uint8_t)count;
+    out->switch_lut._reserved = 0;
+    memcpy(out->switch_lut.values, &distance_lut[offset],
+           count * sizeof(uint16_t));
+    break;
+  }
+  case COMMAND_SET_SWITCH_LUT: {
+    const command_in_set_switch_lut_t *p = &in->set_switch_lut;
+
+    const uint32_t offset = (uint32_t)p->chunk * SWITCH_LUT_CHUNK_SIZE;
+    COMMAND_VERIFY(offset < DISTANCE_LUT_SIZE);
+    COMMAND_VERIFY(p->count <= SWITCH_LUT_CHUNK_SIZE);
+    COMMAND_VERIFY(p->count <= DISTANCE_LUT_SIZE - offset);
+
+    memcpy(&distance_lut[offset], p->values, p->count * sizeof(uint16_t));
+    success = wear_leveling_write(
+        offsetof(eeconfig_t, distance_lut) + offset * sizeof(uint16_t),
+        p->values, p->count * sizeof(uint16_t));
     break;
   }
   case COMMAND_SCAN_RATE: {

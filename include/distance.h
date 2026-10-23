@@ -24,13 +24,13 @@
 // Distance lookup table size
 #define DISTANCE_LUT_SIZE 1024
 
-// Distance lookup table obtained from running `tools/distance_lut.py`
+// Default distance lookup table obtained from running `tools/distance_lut.py`
 // The table represents 10000 * log(1 + ax) / log(1 + (LUT_SIZE - 1)x), where x is
 // the ADC values normalized to the range [0, LUT_SIZE - 1] and a is a constant
 // obtained through fitting the curve to the samples from GEON Raw HE switches
 // and OH49E-S Hall sensors. The table values are board-specific and should be
 // recalculated for each board. See https://www.desmos.com/calculator/nzl6twp6ui
-static const uint16_t distance_lut[] = {
+static const uint16_t distance_lut_default[] = {
         0,    28,    55,    82,   109,   136,   163,   190,   217,   243,   269,   296,   322,   348,   374,
       399,   425,   451,   476,   501,   526,   551,   576,   601,   626,   650,   675,   699,   724,   748,
       772,   796,   820,   843,   867,   891,   914,   937,   961,   984,  1007,  1030,  1053,  1075,  1098,
@@ -102,8 +102,19 @@ static const uint16_t distance_lut[] = {
      9986,  9991,  9995, 10000,
 };
 
-_Static_assert(M_ARRAY_SIZE(distance_lut) == DISTANCE_LUT_SIZE,
+_Static_assert(M_ARRAY_SIZE(distance_lut_default) == DISTANCE_LUT_SIZE,
                "Invalid distance lookup table size");
+
+// Mutable RAM copy of the distance LUT, initialized from distance_lut_default.
+// Can be updated at runtime via GET_SWITCH_LUT / SET_SWITCH_LUT HID commands.
+extern uint16_t distance_lut[DISTANCE_LUT_SIZE];
+
+/**
+ * @brief Initialize the distance LUT RAM copy from the default flash table
+ *
+ * @return None
+ */
+void distance_lut_init(void);
 
 #if !defined(DISTANCE_REST_LENIENCE)
 // Distance units (0-10000) at top to guard against resting magnetic jitter (~0.036mm)
