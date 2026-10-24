@@ -148,9 +148,34 @@ extern const eeconfig_t *eeconfig;
 #error "DEFAULT_KEYMAPS is not defined"
 #endif
 
+#if !defined(DEFAULT_ACTUATION_POINT_MM_TENTHS)
+// Default actuation point in tenths of a millimeter (2.0mm = 20)
+#define DEFAULT_ACTUATION_POINT_MM_TENTHS 20
+#endif
+
+#if !defined(DEFAULT_RT_SENSITIVITY_MM_TENTHS)
+// Default Rapid Trigger sensitivity in tenths of a millimeter (0.2mm = 2)
+#define DEFAULT_RT_SENSITIVITY_MM_TENTHS 2
+#endif
+
+#if !defined(DEFAULT_RT_DEADZONE_MM_TENTHS)
+// Default Rapid Trigger deadzone in tenths of a millimeter (0.1mm = 1)
+#define DEFAULT_RT_DEADZONE_MM_TENTHS 1
+#endif
+
 #if !defined(DEFAULT_ACTUATION_POINT)
-// Default actuation point
-#define DEFAULT_ACTUATION_POINT 5000
+// Default actuation point (2.0mm for 3.6mm travel switch = 5556)
+#define DEFAULT_ACTUATION_POINT 5556
+#endif
+
+#if !defined(DEFAULT_RT_SENSITIVITY)
+// Default Rapid Trigger sensitivity (0.2mm for 3.6mm travel switch = 556)
+#define DEFAULT_RT_SENSITIVITY 556
+#endif
+
+#if !defined(DEFAULT_RT_DEADZONE)
+// Default Rapid Trigger deadzone (0.1mm for 3.6mm travel switch = 278)
+#define DEFAULT_RT_DEADZONE 278
 #endif
 
 #if !defined(DEFAULT_GAMEPAD_OPTIONS)

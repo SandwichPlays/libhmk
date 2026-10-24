@@ -37,6 +37,10 @@ typedef struct __attribute__((packed)) {
   uint16_t eval_max_us;
   // Average loop iteration latency in microseconds
   uint16_t eval_avg_us;
+  // Last switch press latency in microseconds (from raw ADC actuation crossing to input finalization)
+  uint16_t press_latency_us;
+  // Last switch release / Rapid Trigger latency in microseconds
+  uint16_t release_latency_us;
 } scan_rate_t;
 
 //--------------------------------------------------------------------+
@@ -59,3 +63,18 @@ void scan_rate_task(void);
  * @param out Buffer to write the rates to
  */
 void scan_rate_get(scan_rate_t *out);
+
+/**
+ * @brief Get the current ADC sweep period in microseconds
+ */
+uint16_t scan_rate_get_sweep_period_us(void);
+
+/**
+ * @brief Record a key press latency event
+ */
+void scan_rate_record_press_latency(uint16_t latency_us);
+
+/**
+ * @brief Record a key release / Rapid Trigger latency event
+ */
+void scan_rate_record_release_latency(uint16_t latency_us);

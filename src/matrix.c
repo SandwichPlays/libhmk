@@ -19,6 +19,7 @@
 #include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "lib/bitmap.h"
+#include "scan_rate.h"
 
 // Exponential moving average (EMA) filter with symmetric half-step rounding
 #define EMA(x, y)                                                              \
@@ -79,6 +80,8 @@ static uint16_t stable_ref[NUM_KEYS] = {0};
 static uint16_t hyst_gap[NUM_KEYS] = {0};
 static uint16_t raw_boot_rest[NUM_KEYS] = {0};
 static uint16_t last_raw_val[NUM_KEYS] = {0};
+static uint32_t press_cycle_start[NUM_KEYS] = {0};
+static uint32_t release_cycle_start[NUM_KEYS] = {0};
 
 void matrix_update_calibration(void) {
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
@@ -132,6 +135,8 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     key_matrix[i].extremum = 0;
     key_matrix[i].key_dir = KEY_DIR_INACTIVE;
     key_matrix[i].is_pressed = false;
+    press_cycle_start[i] = 0;
+    release_cycle_start[i] = 0;
     stable_timer[i] = timer_read();
   }
 
@@ -368,6 +373,45 @@ void matrix_scan(void) {
                                 ? (actuation->actuation_point - gap)
                                 : 0;
 
+    const uint16_t sweep_us = scan_rate_get_sweep_period_us();
+    const uint32_t sweep_cycles = (F_CPU / 1000000u) * sweep_us;
+    const uint16_t raw_sensor_dist =
+        adc_to_distance(raw_val,
+                        key_matrix[i].adc_rest_value,
+                        key_matrix[i].adc_bottom_out_value);
+
+    if (!key_matrix[i].is_pressed) {
+      if (raw_sensor_dist >= actuation->actuation_point) {
+        if (press_cycle_start[i] == 0) {
+          uint32_t cur = board_cycle_count();
+          press_cycle_start[i] = (cur >= sweep_cycles) ? (cur - sweep_cycles) : cur;
+        }
+      } else {
+        press_cycle_start[i] = 0;
+      }
+    } else {
+      if (bitmap_get(rapid_trigger_disabled, i) || (actuation->rt_down == 0)) {
+        if (raw_sensor_dist <= deact_point) {
+          if (release_cycle_start[i] == 0) {
+            uint32_t cur = board_cycle_count();
+            release_cycle_start[i] = (cur >= sweep_cycles) ? (cur - sweep_cycles) : cur;
+          }
+        } else {
+          release_cycle_start[i] = 0;
+        }
+      } else {
+        const uint16_t rt_up =
+            actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
+        if (key_matrix[i].key_dir == KEY_DIR_DOWN &&
+            raw_sensor_dist + rt_up < key_matrix[i].extremum) {
+          if (release_cycle_start[i] == 0) {
+            uint32_t cur = board_cycle_count();
+            release_cycle_start[i] = (cur >= sweep_cycles) ? (cur - sweep_cycles) : cur;
+          }
+        }
+      }
+    }
+
     bool next_pressed = key_matrix[i].is_pressed;
 
     if (bitmap_get(rapid_trigger_disabled, i) || (actuation->rt_down == 0)) {
@@ -458,6 +502,21 @@ void matrix_scan(void) {
       if (!next_pressed || now - key_matrix[i].last_state_change_time >= debounce_time) {
         key_matrix[i].is_pressed = next_pressed;
         key_matrix[i].last_state_change_time = now;
+
+        const uint32_t cur = board_cycle_count();
+        if (next_pressed) {
+          if (press_cycle_start[i] != 0 && cur >= press_cycle_start[i]) {
+            uint32_t us = (cur - press_cycle_start[i]) / (F_CPU / 1000000u);
+            scan_rate_record_press_latency((uint16_t)M_MIN(us, UINT16_MAX));
+          }
+          press_cycle_start[i] = 0;
+        } else {
+          if (release_cycle_start[i] != 0 && cur >= release_cycle_start[i]) {
+            uint32_t us = (cur - release_cycle_start[i]) / (F_CPU / 1000000u);
+            scan_rate_record_release_latency((uint16_t)M_MIN(us, UINT16_MAX));
+          }
+          release_cycle_start[i] = 0;
+        }
       }
     }
   }

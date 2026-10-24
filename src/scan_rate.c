@@ -97,6 +97,9 @@ void scan_rate_task(void) {
   scan_rate_reset_window(now);
 }
 
+static volatile uint16_t latest_press_latency_us = 0;
+static volatile uint16_t latest_release_latency_us = 0;
+
 void scan_rate_get(scan_rate_t *out) {
   active_until_ms = timer_read() + 2000;
   out->eval_rate_hz = eval_rate_hz;
@@ -105,4 +108,18 @@ void scan_rate_get(scan_rate_t *out) {
   out->eval_min_us = eval_min_us;
   out->eval_max_us = eval_max_us;
   out->eval_avg_us = eval_avg_us;
+  out->press_latency_us = latest_press_latency_us;
+  out->release_latency_us = latest_release_latency_us;
+}
+
+uint16_t scan_rate_get_sweep_period_us(void) {
+  return sweep_period_us > 0 ? sweep_period_us : 33;
+}
+
+void scan_rate_record_press_latency(uint16_t latency_us) {
+  latest_press_latency_us = latency_us;
+}
+
+void scan_rate_record_release_latency(uint16_t latency_us) {
+  latest_release_latency_us = latency_us;
 }
