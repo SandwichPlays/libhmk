@@ -374,17 +374,21 @@ void matrix_scan(void) {
     const uint16_t bot_limit = (bot_dz < travel_um) ? (travel_um - bot_dz) : travel_um;
     const uint16_t rt_up = actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
     const uint16_t rt_down = actuation->rt_down;
-    const uint16_t release_floor = actuation->continuous ? top_dz : deact_point;
-    const uint16_t press_min = actuation->continuous ? top_dz : actuation->actuation_point;
 
     if (!key_matrix[i].is_pressed) {
       bool would_press = false;
       if (bitmap_get(rapid_trigger_disabled, i) || (rt_down == 0)) {
         would_press = (raw_sensor_dist >= actuation->actuation_point);
       } else {
-        would_press = (raw_sensor_dist > top_dz &&
-                       raw_sensor_dist >= press_min &&
-                       (raw_sensor_dist >= key_matrix[i].extremum + rt_down));
+        if (raw_sensor_dist >= actuation->actuation_point &&
+            (key_matrix[i].key_dir == KEY_DIR_INACTIVE ||
+             key_matrix[i].extremum <= actuation->actuation_point)) {
+          would_press = true;
+        } else if (raw_sensor_dist > top_dz &&
+                   (raw_sensor_dist >= key_matrix[i].extremum + rt_down) &&
+                   (actuation->continuous || raw_sensor_dist >= actuation->actuation_point)) {
+          would_press = true;
+        }
       }
       if (would_press) {
         if (press_cycle_start[i] == 0) {
@@ -399,8 +403,9 @@ void matrix_scan(void) {
       if (bitmap_get(rapid_trigger_disabled, i) || (rt_down == 0)) {
         would_release = (raw_sensor_dist <= deact_point);
       } else {
-        would_release = (raw_sensor_dist <= release_floor ||
-                         (raw_sensor_dist + rt_up <= key_matrix[i].extremum));
+        would_release = (raw_sensor_dist <= deact_point ||
+                         (key_matrix[i].extremum > top_dz &&
+                          raw_sensor_dist + rt_up <= key_matrix[i].extremum));
       }
       if (would_release) {
         if (release_cycle_start[i] == 0) {
@@ -435,27 +440,50 @@ void matrix_scan(void) {
         key_matrix[i].key_dir = KEY_DIR_DOWN;
         next_pressed = true;
       } else if (key_matrix[i].is_pressed) {
-        // --- IN PRESSED STATE: Listen ONLY for upward retreat ---
+        // --- IN PRESSED STATE: Listen for upward retreat or release past deactuation ---
         if (dist > key_matrix[i].extremum) {
           // Push local peak deeper
           key_matrix[i].extremum = dist;
-        } else if (dist <= release_floor || (key_matrix[i].extremum - dist >= rt_up)) {
-          // Retreat exceeded release sensitivity or reached floor -> RELEASE
+        } else if (dist <= deact_point) {
+          // Released past deactuation point (hysteresis) -> full reset
+          key_matrix[i].extremum = dist;
+          key_matrix[i].key_dir = KEY_DIR_INACTIVE;
+          next_pressed = false;
+        } else if (key_matrix[i].extremum > top_dz &&
+                   (dist + rt_up <= key_matrix[i].extremum)) {
+          // Retreat exceeded release sensitivity outside top deadzone -> RELEASE
           key_matrix[i].extremum = dist; // Lock valley at release point
           key_matrix[i].key_dir = KEY_DIR_UP;
           next_pressed = false;
         }
       } else {
-        // --- IN RELEASED STATE: Listen ONLY for downward plunge ---
+        // --- IN RELEASED STATE: Listen for downward plunge or static actuation ---
         if (dist < key_matrix[i].extremum) {
           // Pull local valley higher
           key_matrix[i].extremum = dist;
-        } else if (dist > top_dz && dist >= press_min &&
-                   (dist - key_matrix[i].extremum >= rt_down)) {
-          // Plunge exceeded press sensitivity -> PRESS
-          key_matrix[i].extremum = dist; // Lock peak at press point
-          key_matrix[i].key_dir = KEY_DIR_DOWN;
-          next_pressed = true;
+          if (dist <= deact_point) {
+            key_matrix[i].key_dir = KEY_DIR_INACTIVE;
+          }
+        } else {
+          bool should_press = false;
+          // Normal actuation point
+          if (dist >= actuation->actuation_point &&
+              (key_matrix[i].key_dir == KEY_DIR_INACTIVE ||
+               key_matrix[i].extremum <= actuation->actuation_point)) {
+            should_press = true;
+          }
+          // Rapid Trigger press (only outside top deadzone)
+          else if (dist > top_dz && (dist >= key_matrix[i].extremum + rt_down)) {
+            if (actuation->continuous || dist >= actuation->actuation_point) {
+              should_press = true;
+            }
+          }
+
+          if (should_press) {
+            key_matrix[i].extremum = dist; // Lock peak at press point
+            key_matrix[i].key_dir = KEY_DIR_DOWN;
+            next_pressed = true;
+          }
         }
       }
     }
