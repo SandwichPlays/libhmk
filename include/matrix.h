@@ -29,7 +29,7 @@
 #if !defined(MATRIX_EMA_ALPHA_EXPONENT)
 // Exponent of the alpha parameter of the exponential moving average (EMA)
 // filter used to smooth the ADC values. Set to 0 to bypass EMA completely.
-#define MATRIX_EMA_ALPHA_EXPONENT 3
+#define MATRIX_EMA_ALPHA_EXPONENT 2
 #endif
 
 #if !defined(MATRIX_CALIBRATION_EPSILON)
