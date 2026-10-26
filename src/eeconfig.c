@@ -46,18 +46,11 @@ static bool eeconfig_is_latest_version(void) {
 }
 
 void eeconfig_init(void) {
-  // Update default profile with its default values scaled per key switch travel in mm
+  // Initialize default profile with default actuation and deadzones in micrometers
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    uint8_t travel = default_calibration.switch_travel[i];
-    if (travel < 20 || travel > 50) {
-      travel = 36;
-    }
-    default_profile.actuation_map[i].actuation_point =
-        (uint16_t)((DEFAULT_ACTUATION_POINT_MM_TENTHS * 10000UL) / travel);
-    default_profile.actuation_map[i].rt_deadzone_top =
-        (uint16_t)((DEFAULT_RT_DEADZONE_MM_TENTHS * 10000UL) / travel);
-    default_profile.actuation_map[i].rt_deadzone_bottom =
-        (uint16_t)((DEFAULT_RT_DEADZONE_MM_TENTHS * 10000UL) / travel);
+    default_profile.actuation_map[i].actuation_point = DEFAULT_ACTUATION_POINT;
+    default_profile.actuation_map[i].rt_deadzone_top = DEFAULT_RT_DEADZONE;
+    default_profile.actuation_map[i].rt_deadzone_bottom = DEFAULT_RT_DEADZONE;
   }
 
   eeconfig = (const eeconfig_t *)wl_cache;

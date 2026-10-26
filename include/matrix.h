@@ -48,6 +48,11 @@
 #define MATRIX_BASELINE_DOWN_TIME_MS 20
 #endif
 
+#if !defined(MATRIX_HYST_GAP)
+// Default hysteresis gap in micrometers (0.020mm = 20 µm)
+#define MATRIX_HYST_GAP 20
+#endif
+
 #if ADC_NUM_MUX_INPUTS > 0
 #define MATRIX_NUM_ANALOG_KEYS NUM_KEYS
 #elif defined(ADC_NUM_RAW_INPUTS)
@@ -76,13 +81,10 @@ typedef struct {
   uint16_t adc_rest_value;
   // ADC value when the key is fully pressed
   uint16_t adc_bottom_out_value;
-  // Fixed lenience offset added to adc_rest_value (cached, recomputed only when
-  // rest or bottom-out changes)
-  uint16_t adc_rest_lenience;
 
-  // Key travel distance (0-10000)
+  // Key travel distance in micrometers (0.001mm)
   uint16_t distance;
-  // Last extremum point of the key travel distance (0-10000)
+  // Last extremum point of the key travel distance in micrometers (0.001mm)
   uint16_t extremum;
   // Current key travel direction
   uint8_t key_dir;
@@ -154,6 +156,14 @@ uint8_t matrix_get_calibration_status(uint8_t key);
  * @return None
  */
 void matrix_update_calibration(void);
+
+/**
+ * @brief Get key switch travel in micrometers (0.001mm)
+ *
+ * @param key Key index
+ * @return Switch travel in micrometers (e.g. 3600 for 3.6mm)
+ */
+uint16_t matrix_get_travel_um(uint8_t key);
 
 /**
  * @brief Check if a key has inverted polarity (North-facing magnet)

@@ -82,7 +82,7 @@ typedef struct __attribute__((packed)) {
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x0109
+#define EECONFIG_VERSION 0x010A
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -164,18 +164,18 @@ extern const eeconfig_t *eeconfig;
 #endif
 
 #if !defined(DEFAULT_ACTUATION_POINT)
-// Default actuation point (2.0mm for 3.6mm travel switch = 5556)
-#define DEFAULT_ACTUATION_POINT 5556
+// Default actuation point (2.0mm = 2000 micrometers)
+#define DEFAULT_ACTUATION_POINT 2000
 #endif
 
 #if !defined(DEFAULT_RT_SENSITIVITY)
-// Default Rapid Trigger sensitivity (0.2mm for 3.6mm travel switch = 556)
-#define DEFAULT_RT_SENSITIVITY 556
+// Default Rapid Trigger sensitivity (0.2mm = 200 micrometers)
+#define DEFAULT_RT_SENSITIVITY 200
 #endif
 
 #if !defined(DEFAULT_RT_DEADZONE)
-// Default Rapid Trigger deadzone (0.1mm for 3.6mm travel switch = 278)
-#define DEFAULT_RT_DEADZONE 278
+// Default Rapid Trigger deadzone (0.1mm = 100 micrometers)
+#define DEFAULT_RT_DEADZONE 100
 #endif
 
 #if !defined(DEFAULT_GAMEPAD_OPTIONS)

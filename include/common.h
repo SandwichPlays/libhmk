@@ -97,17 +97,17 @@ _Static_assert(1 <= NUM_ADVANCED_KEYS && NUM_ADVANCED_KEYS <= 64,
 // enabled. If `rt_up` is non-zero, both `rt_down` and `rt_up` are used to
 // configure the Rapid Trigger press and release sensitivity, respectively.
 typedef struct __attribute__((packed)) {
-  // Actuation point (0-10000)
+  // Actuation point in micrometers (0.001mm)
   uint16_t actuation_point;
-  // Rapid Trigger press sensitivity (0-10000)
+  // Rapid Trigger press sensitivity in micrometers (0.001mm)
   uint16_t rt_down;
-  // Rapid Trigger release sensitivity (0-10000)
+  // Rapid Trigger release sensitivity in micrometers (0.001mm)
   uint16_t rt_up;
   // Whether Continuous Rapid Trigger is enabled
   bool continuous;
-  // Top Rapid Trigger deadzone distance (0-10000)
+  // Top Rapid Trigger deadzone distance in micrometers (0.001mm)
   uint16_t rt_deadzone_top;
-  // Bottom Rapid Trigger deadzone distance (0-10000)
+  // Bottom Rapid Trigger deadzone distance in micrometers (0.001mm)
   uint16_t rt_deadzone_bottom;
 } actuation_t;
 
@@ -140,7 +140,7 @@ typedef enum {
 typedef struct __attribute__((packed)) {
   uint8_t secondary_key;
   uint8_t behavior;
-  // Bottom-out point (0-10000). If non-zero, both keys will be registered if both
+  // Bottom-out point in micrometers (0.001mm). If non-zero, both keys will be registered if both
   // of them are pressed past this point, regardless of the behavior.
   uint16_t bottom_out_point;
 } null_bind_t;
@@ -163,7 +163,7 @@ typedef struct __attribute__((packed)) {
   // Bit 4-5: Action for key release from bottom-out
   // Bit 6-7: Action for key release
   uint8_t bitmap[4];
-  // Bottom-out point (0-10000)
+  // Bottom-out point in micrometers (0.001mm)
   uint16_t bottom_out_point;
 } dynamic_keystroke_t;
 

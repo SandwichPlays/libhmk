@@ -166,7 +166,11 @@ void xinput_process(uint8_t key) {
   case GP_BUTTON_LS_UP ... GP_BUTTON_RT: {
     // Only update and mark dirty if the key is actually contributing
     if (k->distance > 0) {
-      ANALOG_STATE(keycode) = M_MAX(ANALOG_STATE(keycode), k->distance);
+      uint32_t norm_dist = ((uint32_t)k->distance * 10000) / matrix_get_travel_um(key);
+      if (norm_dist > 10000) {
+        norm_dist = 10000;
+      }
+      ANALOG_STATE(keycode) = M_MAX(ANALOG_STATE(keycode), (uint16_t)norm_dist);
       analog_states_dirty = true;
     }
     break;

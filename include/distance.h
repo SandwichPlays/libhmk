@@ -112,33 +112,34 @@ extern uint16_t distance_lut[DISTANCE_LUT_SIZE];
 void distance_lut_init(void);
 
 #if !defined(DISTANCE_REST_LENIENCE)
-// Distance units (0-10000) at top to guard against resting magnetic jitter (~0.054mm on 3.6mm switch)
-#define DISTANCE_REST_LENIENCE 150
+// Distance units in micrometers (0.001mm) at top to guard against resting magnetic jitter (~0.050mm)
+#define DISTANCE_REST_LENIENCE 50u
 #endif
 
 #if !defined(DISTANCE_BOTTOM_LENIENCE)
-// Distance units (0-10000) at bottom to guarantee clean 10000 bottom-out (~0.036mm)
-#define DISTANCE_BOTTOM_LENIENCE 100
+// Distance units in micrometers (0.001mm) at bottom to guarantee clean bottom-out (~0.030mm)
+#define DISTANCE_BOTTOM_LENIENCE 30u
 #endif
 
 /**
- * @brief Convert ADC value to distance in the range [0, 10000]
+ * @brief Convert ADC value to distance in micrometers (0.001mm, range [0, max_travel_um])
  *
  * @param adc ADC value
  * @param adc_rest_value ADC value when the key is fully released
  * @param adc_bottom_out_value ADC value when the key is fully pressed
+ * @param max_travel_um Key travel in micrometers (e.g. 3600 for 3.6mm)
  *
- * @return Distance in the range [0, 10000]
+ * @return Distance in micrometers [0, max_travel_um]
  */
 __attribute__((always_inline)) static inline uint16_t
 adc_to_distance(uint16_t adc, uint16_t adc_rest_value,
-                uint16_t adc_bottom_out_value) {
+                uint16_t adc_bottom_out_value, uint16_t max_travel_um) {
   if (adc <= adc_rest_value)
     return 0;
   if (adc_rest_value >= adc_bottom_out_value)
     return 0;
   if (adc >= adc_bottom_out_value)
-    return 10000;
+    return max_travel_um;
 
   const uint32_t range = (uint32_t)(adc_bottom_out_value - adc_rest_value);
   const uint32_t scaled = (uint32_t)(adc - adc_rest_value) *
@@ -148,22 +149,24 @@ adc_to_distance(uint16_t adc, uint16_t adc_rest_value,
   const uint32_t frac = scaled & 0xFF;
 
   if (idx >= DISTANCE_LUT_SIZE - 1)
-    return 10000;
+    return max_travel_um;
 
   const uint32_t d0 = distance_lut[idx];
   const uint32_t d1 = distance_lut[idx + 1];
 
-  uint16_t raw_dist = (uint16_t)(d0 + (((d1 - d0) * frac) >> 8));
+  uint16_t lut_ratio = (uint16_t)(d0 + (((d1 - d0) * frac) >> 8));
+  uint16_t raw_dist = (uint16_t)(((uint32_t)lut_ratio * (uint32_t)max_travel_um) / 10000u);
 
 #if (DISTANCE_REST_LENIENCE > 0) || (DISTANCE_BOTTOM_LENIENCE > 0)
   if (raw_dist <= DISTANCE_REST_LENIENCE)
     return 0;
-  if (raw_dist >= (10000 - DISTANCE_BOTTOM_LENIENCE))
-    return 10000;
+  if (raw_dist >= (max_travel_um - DISTANCE_BOTTOM_LENIENCE))
+    return max_travel_um;
 
-  // Smoothly rescale [REST_LENIENCE, 10000 - BOTTOM_LENIENCE] into [0, 10000] with zero jump
-  return (uint16_t)(((uint32_t)(raw_dist - DISTANCE_REST_LENIENCE) * 10000) /
-                    (10000 - DISTANCE_REST_LENIENCE - DISTANCE_BOTTOM_LENIENCE));
+  // Smoothly rescale [REST_LENIENCE, max_travel_um - BOTTOM_LENIENCE] into [0, max_travel_um] with zero jump
+  const uint32_t effective_dist = (uint32_t)raw_dist - DISTANCE_REST_LENIENCE;
+  const uint32_t effective_range = (uint32_t)max_travel_um - DISTANCE_REST_LENIENCE - DISTANCE_BOTTOM_LENIENCE;
+  return (uint16_t)((effective_dist * (uint32_t)max_travel_um) / effective_range);
 #else
   return raw_dist;
 #endif

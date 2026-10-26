@@ -59,12 +59,6 @@ matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
   return M_MIN((uint32_t)rest_value + threshold, ADC_MAX_VALUE);
 }
 
-// Rest lenience is handled smoothly in the distance domain (DISTANCE_REST_LENIENCE).
-__attribute__((always_inline)) static inline void
-matrix_update_lenience(uint8_t key) {
-  key_matrix[key].adc_rest_lenience = 0;
-}
-
 key_state_t key_matrix[NUM_KEYS];
 
 // Bitmap for tracking which keys have Rapid Trigger disabled
@@ -72,12 +66,11 @@ static bitmap_t rapid_trigger_disabled[] = MAKE_BITMAP(NUM_KEYS);
 
 static bool manual_calib_active = false;
 static uint8_t manual_calib_status[NUM_KEYS] = {0};
-static uint8_t manual_calib_dir[NUM_KEYS] = {0};
 static uint16_t manual_calib_peak[NUM_KEYS] = {0};
 
 static uint32_t stable_timer[NUM_KEYS] = {0};
 static uint16_t stable_ref[NUM_KEYS] = {0};
-static uint16_t hyst_gap[NUM_KEYS] = {0};
+static uint16_t switch_travel_um[NUM_KEYS] = {0};
 static uint16_t raw_boot_rest[NUM_KEYS] = {0};
 static uint16_t last_raw_val[NUM_KEYS] = {0};
 static uint32_t press_cycle_start[NUM_KEYS] = {0};
@@ -89,10 +82,15 @@ void matrix_update_calibration(void) {
     if (travel_tenths < 20 || travel_tenths > 50) {
       travel_tenths = 36;
     }
-    // 0.02mm hysteresis guard = 0.02 * 100000 / travel_tenths = 2000 / travel_tenths
-    uint16_t gap = (uint16_t)(2000 / travel_tenths);
-    hyst_gap[i] = (gap < 20) ? 55 : gap;
+    switch_travel_um[i] = (uint16_t)travel_tenths * 100;
   }
+}
+
+uint16_t matrix_get_travel_um(uint8_t key) {
+  if (key < NUM_KEYS) {
+    return switch_travel_um[key] ? switch_travel_um[key] : 3600;
+  }
+  return 3600;
 }
 
 void matrix_init(void) { matrix_recalibrate(false); }
@@ -169,15 +167,14 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     EECONFIG_WRITE(calibration, &calib);
   }
 
-  // 5. Update bottom out values and lenience using the fresh rest values
+  // 5. Update bottom out values using the fresh rest values
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     raw_boot_rest[i] = analog_read(i);
     key_matrix[i].adc_bottom_out_value =
         matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
-    matrix_update_lenience(i);
   }
 
-  // 6. Update cached hysteresis gap
+  // 6. Update cached switch travel
   matrix_update_calibration();
 }
 
@@ -196,11 +193,9 @@ void matrix_start_manual_calibration(const uint8_t *keys, uint8_t count) {
     }
     if (target) {
       manual_calib_status[i] = CALIB_STATE_WAITING;
-      manual_calib_dir[i] = 0;
       manual_calib_peak[i] = key_matrix[i].adc_rest_value;
     } else {
       manual_calib_status[i] = CALIB_STATE_IDLE;
-      manual_calib_dir[i] = 0;
     }
   }
 }
@@ -226,7 +221,6 @@ void matrix_finish_manual_calibration(bool save) {
   manual_calib_active = false;
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     manual_calib_status[i] = CALIB_STATE_IDLE;
-    manual_calib_dir[i] = 0;
   }
 }
 
@@ -261,7 +255,6 @@ void matrix_scan(void) {
           key_matrix[i].adc_filtered = ADC_MAX_VALUE - raw_current;
           key_matrix[i].adc_bottom_out_value =
               matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
-          matrix_update_lenience(i);
         }
       } else {
         if (raw_current > raw_boot_rest[i] + 150) {
@@ -270,7 +263,6 @@ void matrix_scan(void) {
           key_matrix[i].adc_filtered = raw_current;
           key_matrix[i].adc_bottom_out_value =
               matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
-          matrix_update_lenience(i);
         }
       }
     }
@@ -309,7 +301,6 @@ void matrix_scan(void) {
           if (manual_calib_status[i] == CALIB_STATE_IDLE) {
             key_matrix[i].adc_bottom_out_value =
                 matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
-            matrix_update_lenience(i);
           }
           stable_timer[i] = now;
           stable_ref[i] = new_adc_filtered;
@@ -334,18 +325,15 @@ void matrix_scan(void) {
           new_adc_filtered = key_matrix[i].adc_filtered;
           key_matrix[i].adc_bottom_out_value = new_adc_filtered;
           manual_calib_peak[i] = new_adc_filtered;
-          matrix_update_lenience(i);
           manual_calib_status[i] = CALIB_STATE_RECORDING;
         }
       } else if (manual_calib_status[i] == CALIB_STATE_RECORDING) {
         if (new_adc_filtered > manual_calib_peak[i]) {
           manual_calib_peak[i] = new_adc_filtered;
           key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
-          matrix_update_lenience(i);
         } else if (new_adc_filtered <= key_matrix[i].adc_rest_value + 30) {
           manual_calib_status[i] = CALIB_STATE_COMPLETED;
           key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
-          matrix_update_lenience(i);
         }
       }
     } else if ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_THRESHOLD_MASK) == 0) {
@@ -353,24 +341,24 @@ void matrix_scan(void) {
       if (new_adc_filtered >=
           key_matrix[i].adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON) {
         key_matrix[i].adc_bottom_out_value = new_adc_filtered;
-        matrix_update_lenience(i);
       }
     }
 
-    const uint16_t gap = hyst_gap[i];
+    const uint16_t travel_um = switch_travel_um[i];
     const uint16_t raw_dist =
         adc_to_distance(new_adc_filtered,
                         key_matrix[i].adc_rest_value,
-                        key_matrix[i].adc_bottom_out_value);
+                        key_matrix[i].adc_bottom_out_value,
+                        travel_um);
     uint16_t dist = key_matrix[i].distance;
-    if (raw_dist == 0 || raw_dist == 10000 ||
-        abs((int32_t)raw_dist - (int32_t)dist) > (gap >> 3)) {
+    if (raw_dist == 0 || raw_dist == travel_um ||
+        abs((int32_t)raw_dist - (int32_t)dist) > 3) {
       dist = raw_dist;
       key_matrix[i].distance = dist;
     }
 
-    const uint16_t deact_point = (actuation->actuation_point > gap)
-                                ? (actuation->actuation_point - gap)
+    const uint16_t deact_point = (actuation->actuation_point > MATRIX_HYST_GAP)
+                                ? (actuation->actuation_point - MATRIX_HYST_GAP)
                                 : 0;
 
     const uint16_t sweep_us = scan_rate_get_sweep_period_us();
@@ -378,10 +366,27 @@ void matrix_scan(void) {
     const uint16_t raw_sensor_dist =
         adc_to_distance(raw_val,
                         key_matrix[i].adc_rest_value,
-                        key_matrix[i].adc_bottom_out_value);
+                        key_matrix[i].adc_bottom_out_value,
+                        travel_um);
+
+    const uint16_t top_dz = actuation->rt_deadzone_top;
+    const uint16_t bot_dz = actuation->rt_deadzone_bottom;
+    const uint16_t bot_limit = (bot_dz < travel_um) ? (travel_um - bot_dz) : travel_um;
+    const uint16_t rt_up = actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
+    const uint16_t rt_down = actuation->rt_down;
+    const uint16_t release_floor = actuation->continuous ? top_dz : deact_point;
+    const uint16_t press_min = actuation->continuous ? top_dz : actuation->actuation_point;
 
     if (!key_matrix[i].is_pressed) {
-      if (raw_sensor_dist >= actuation->actuation_point) {
+      bool would_press = false;
+      if (bitmap_get(rapid_trigger_disabled, i) || (rt_down == 0)) {
+        would_press = (raw_sensor_dist >= actuation->actuation_point);
+      } else {
+        would_press = (raw_sensor_dist > top_dz &&
+                       raw_sensor_dist >= press_min &&
+                       (raw_sensor_dist >= key_matrix[i].extremum + rt_down));
+      }
+      if (would_press) {
         if (press_cycle_start[i] == 0) {
           uint32_t cur = board_cycle_count();
           press_cycle_start[i] = (cur >= sweep_cycles) ? (cur - sweep_cycles) : cur;
@@ -390,31 +395,27 @@ void matrix_scan(void) {
         press_cycle_start[i] = 0;
       }
     } else {
-      if (bitmap_get(rapid_trigger_disabled, i) || (actuation->rt_down == 0)) {
-        if (raw_sensor_dist <= deact_point) {
-          if (release_cycle_start[i] == 0) {
-            uint32_t cur = board_cycle_count();
-            release_cycle_start[i] = (cur >= sweep_cycles) ? (cur - sweep_cycles) : cur;
-          }
-        } else {
-          release_cycle_start[i] = 0;
+      bool would_release = false;
+      if (bitmap_get(rapid_trigger_disabled, i) || (rt_down == 0)) {
+        would_release = (raw_sensor_dist <= deact_point);
+      } else {
+        would_release = (raw_sensor_dist <= release_floor ||
+                         (raw_sensor_dist + rt_up <= key_matrix[i].extremum));
+      }
+      if (would_release) {
+        if (release_cycle_start[i] == 0) {
+          uint32_t cur = board_cycle_count();
+          release_cycle_start[i] = (cur >= sweep_cycles) ? (cur - sweep_cycles) : cur;
         }
       } else {
-        const uint16_t rt_up =
-            actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
-        if (key_matrix[i].key_dir == KEY_DIR_DOWN &&
-            raw_sensor_dist + rt_up < key_matrix[i].extremum) {
-          if (release_cycle_start[i] == 0) {
-            uint32_t cur = board_cycle_count();
-            release_cycle_start[i] = (cur >= sweep_cycles) ? (cur - sweep_cycles) : cur;
-          }
-        }
+        release_cycle_start[i] = 0;
       }
     }
 
     bool next_pressed = key_matrix[i].is_pressed;
 
-    if (bitmap_get(rapid_trigger_disabled, i) || (actuation->rt_down == 0)) {
+    if (bitmap_get(rapid_trigger_disabled, i) || (rt_down == 0)) {
+      // Classic static actuation mode
       key_matrix[i].key_dir = KEY_DIR_INACTIVE;
       if (key_matrix[i].is_pressed) {
         if (dist <= deact_point) {
@@ -425,74 +426,36 @@ void matrix_scan(void) {
           next_pressed = true;
         }
       }
+      key_matrix[i].extremum = dist;
     } else {
-      const uint16_t top_dz = actuation->rt_deadzone_top;
-      const uint16_t bot_dz = actuation->rt_deadzone_bottom;
-      const uint16_t bot_limit = (bot_dz < 10000) ? (10000 - bot_dz) : 10000;
-
+      // Pure Asymmetric Rapid Trigger State Machine
       if (dist >= bot_limit) {
+        // Bottom deadzone: lock to pressed and peak
         key_matrix[i].extremum = dist;
         key_matrix[i].key_dir = KEY_DIR_DOWN;
         next_pressed = true;
+      } else if (key_matrix[i].is_pressed) {
+        // --- IN PRESSED STATE: Listen ONLY for upward retreat ---
+        if (dist > key_matrix[i].extremum) {
+          // Push local peak deeper
+          key_matrix[i].extremum = dist;
+        } else if (dist <= release_floor || (key_matrix[i].extremum - dist >= rt_up)) {
+          // Retreat exceeded release sensitivity or reached floor -> RELEASE
+          key_matrix[i].extremum = dist; // Lock valley at release point
+          key_matrix[i].key_dir = KEY_DIR_UP;
+          next_pressed = false;
+        }
       } else {
-        const uint16_t reset_point =
-            (actuation->continuous && top_dz < deact_point) ? top_dz : deact_point;
-        const uint16_t rt_up =
-            actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
-        const uint16_t rt_active_min =
-            M_MAX((uint32_t)actuation->actuation_point + gap, top_dz);
-
-        switch (key_matrix[i].key_dir) {
-        case KEY_DIR_INACTIVE:
-          if (dist >= actuation->actuation_point) {
-            // Pressed down past actuation point
-            key_matrix[i].extremum = dist;
-            key_matrix[i].key_dir = KEY_DIR_DOWN;
-            next_pressed = true;
-          } else if (dist <= deact_point) {
-            next_pressed = false;
-          }
-          break;
-
-        case KEY_DIR_DOWN:
-          if (dist <= deact_point) {
-            // Released past deactuation point (hysteresis)
-            key_matrix[i].extremum = dist;
-            key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-            next_pressed = false;
-          } else if (key_matrix[i].extremum >= rt_active_min &&
-                     dist + rt_up < key_matrix[i].extremum) {
-            // Released by Rapid Trigger (only once pressed past actuation + hyst_gap and top_dz)
-            key_matrix[i].extremum = dist;
-            key_matrix[i].key_dir = KEY_DIR_UP;
-            next_pressed = false;
-          } else if (dist > key_matrix[i].extremum) {
-            // Pressed down further
-            key_matrix[i].extremum = dist;
-          }
-          break;
-
-        case KEY_DIR_UP:
-          if (dist <= reset_point) {
-            // Released past reset/deactuation point
-            key_matrix[i].extremum = dist;
-            key_matrix[i].key_dir = KEY_DIR_INACTIVE;
-            next_pressed = false;
-          } else if (dist > top_dz &&
-                     key_matrix[i].extremum + actuation->rt_down < dist &&
-                     (actuation->continuous || dist >= actuation->actuation_point)) {
-            // Re-pressed by Rapid Trigger (only outside top deadzone)
-            key_matrix[i].extremum = dist;
-            key_matrix[i].key_dir = KEY_DIR_DOWN;
-            next_pressed = true;
-          } else if (dist < key_matrix[i].extremum) {
-            // Released further
-            key_matrix[i].extremum = dist;
-          }
-          break;
-
-        default:
-          break;
+        // --- IN RELEASED STATE: Listen ONLY for downward plunge ---
+        if (dist < key_matrix[i].extremum) {
+          // Pull local valley higher
+          key_matrix[i].extremum = dist;
+        } else if (dist > top_dz && dist >= press_min &&
+                   (dist - key_matrix[i].extremum >= rt_down)) {
+          // Plunge exceeded press sensitivity -> PRESS
+          key_matrix[i].extremum = dist; // Lock peak at press point
+          key_matrix[i].key_dir = KEY_DIR_DOWN;
+          next_pressed = true;
         }
       }
     }
