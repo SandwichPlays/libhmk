@@ -128,7 +128,12 @@ static uint32_t encoder_key_release_times[NUM_KEYS];
 static uint32_t encoder_key_next_press_times[NUM_KEYS];
 
 void encoder_task(void) {
+  static uint32_t last_encoder_ms = 0;
   uint32_t now = timer_read();
+  if (now == last_encoder_ms) {
+    return;
+  }
+  last_encoder_ms = now;
 
   // 1. Accumulate rotation delta and enqueue pulses
   for (uint32_t i = 0; i < ENCODER_COUNT; i++) {

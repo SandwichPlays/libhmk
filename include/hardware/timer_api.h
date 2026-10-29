@@ -28,12 +28,16 @@
  */
 void timer_init(void);
 
+extern volatile uint32_t timer_counter;
+
 /**
  * @brief Read the current timer value
  *
  * @return Current timer value in milliseconds
  */
-uint32_t timer_read(void);
+__attribute__((always_inline)) static inline uint32_t timer_read(void) {
+  return timer_counter;
+}
 
 /**
  * @brief Get the elapsed time since a given time

@@ -200,11 +200,10 @@ void analog_init(void) {
   tmr_interrupt_enable(TMR6, TMR_OVF_INT, TRUE);
 #endif
 
-  // Enable interrupts
-  nvic_irq_enable(ADC1_IRQn, 0, 0);
-  nvic_irq_enable(DMA1_Channel1_IRQn, 0, 0);
+  // Enable interrupts (priority 1 so USB High-Speed IRQ at priority 0 can preempt immediately)
+  nvic_irq_enable(DMA1_Channel1_IRQn, 1, 0);
 #if ADC_NUM_MUX_INPUTS > 0
-  nvic_irq_enable(TMR6_GLOBAL_IRQn, 0, 0);
+  nvic_irq_enable(TMR6_GLOBAL_IRQn, 1, 0);
 #endif
 
   // Enable the ADC peripheral
@@ -236,7 +235,7 @@ uint32_t analog_get_sweep_count(void) { return analog_sweep_count; }
 // Interrupt Handlers
 //--------------------------------------------------------------------+
 
-void DMA1_Channel1_IRQHandler(void) {
+__attribute__((section(".ramfunc"))) void DMA1_Channel1_IRQHandler(void) {
 #if ADC_NUM_MUX_INPUTS > 0
   static uint8_t current_mux_channel = 0;
 #endif

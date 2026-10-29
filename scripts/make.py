@@ -17,15 +17,19 @@ from schema.keyboard import KeyboardUSBPort
 
 Import("env")
 
+# Throttle concurrent compile jobs to prevent freezing the machine
+SetOption("num_jobs", 4)
+
 keyboard = env["PIOENV"]
 
 # Load JSON files and driver. We assume that they have been validated in `get_deps.py`.
 kb_json = utils.get_kb_json(keyboard)
 driver = utils.get_driver(keyboard)
 driver_name = kb_json.hardware.driver
+driver_dir = driver.hardware_dir or driver_name
 
 # Add source filter for driver source files
-env.Append(SRC_FILTER=["-<hardware/>", f"+<hardware/{driver_name}/>"])
+env.Append(SRC_FILTER=["-<hardware/>", f"+<hardware/{driver_dir}/>"])
 
 # Build with -O3 for maximum performance
 env.ProcessUnFlags("-Os")
@@ -36,13 +40,13 @@ env.Append(CCFLAGS=[
     "-falign-functions=4",
     "-falign-loops=4",
 ])
-env.Append(LINKFLAGS=["-O3", "-funroll-loops"])
+env.Append(LINKFLAGS=["-O3"])
 
 # Build Flags
 build_flags = utils.CompilerFlags()
 
 # Include headers. We prioritize including driver and keyboard headers.
-build_flags.include(f"hardware/{driver_name}")
+build_flags.include(f"hardware/{driver_dir}")
 build_flags.include(f"keyboards/{keyboard}")
 build_flags.include("include")
 

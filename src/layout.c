@@ -128,7 +128,7 @@ void layout_load_advanced_keys(void) {
   }
 }
 
-void layout_task(void) {
+__attribute__((section(".ramfunc"))) void layout_task(void) {
   static advanced_key_event_t ak_event = {0};
   static uint32_t last_ak_tick = 0;
 

@@ -101,9 +101,13 @@ static volatile uint16_t latest_press_latency_us = 0;
 static volatile uint16_t latest_release_latency_us = 0;
 
 void scan_rate_get(scan_rate_t *out) {
-  active_until_ms = timer_read() + 2000;
-  out->eval_rate_hz = eval_rate_hz;
+  const uint32_t now = timer_read();
+  if (now >= active_until_ms) {
+    scan_rate_reset_window(board_cycle_count());
+  }
+  active_until_ms = now + 2000;
   out->sweep_rate_hz = sweep_rate_hz;
+  out->eval_rate_hz = eval_rate_hz;
   out->sweep_period_us = sweep_period_us;
   out->eval_min_us = eval_min_us;
   out->eval_max_us = eval_max_us;
@@ -112,8 +116,12 @@ void scan_rate_get(scan_rate_t *out) {
   out->release_latency_us = latest_release_latency_us;
 }
 
+bool scan_rate_is_active(void) {
+  return timer_read() < active_until_ms;
+}
+
 uint16_t scan_rate_get_sweep_period_us(void) {
-  return sweep_period_us > 0 ? sweep_period_us : 33;
+  return sweep_period_us > 0 ? sweep_period_us : 17;
 }
 
 void scan_rate_record_press_latency(uint16_t latency_us) {

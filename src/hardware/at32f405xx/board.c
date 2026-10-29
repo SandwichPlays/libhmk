@@ -236,8 +236,6 @@ uint32_t board_serial(char *buf) {
   return 24;
 }
 
-uint32_t board_cycle_count(void) { return DWT->CYCCNT; }
-
 //--------------------------------------------------------------------+
 // Interrupt Handlers
 //--------------------------------------------------------------------+

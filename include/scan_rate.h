@@ -25,10 +25,10 @@
 #define SCAN_RATE_WINDOW_MS 250
 
 typedef struct __attribute__((packed)) {
-  // Main loop iterations per second (actuation scan rate)
-  uint32_t eval_rate_hz;
   // Full analog sweeps per second (hardware ADC refresh rate)
   uint32_t sweep_rate_hz;
+  // Main loop iterations per second (actuation scan rate)
+  uint32_t eval_rate_hz;
   // Sweep period in microseconds
   uint16_t sweep_period_us;
   // Minimum loop iteration latency in microseconds
@@ -63,6 +63,11 @@ void scan_rate_task(void);
  * @param out Buffer to write the rates to
  */
 void scan_rate_get(scan_rate_t *out);
+
+/**
+ * @brief Check if scan rate / latency benchmark telemetry is actively polled
+ */
+bool scan_rate_is_active(void);
 
 /**
  * @brief Get the current ADC sweep period in microseconds

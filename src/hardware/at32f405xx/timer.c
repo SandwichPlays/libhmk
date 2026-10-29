@@ -17,14 +17,12 @@
 
 #include "at32f402_405.h"
 
-static volatile uint32_t counter;
+volatile uint32_t timer_counter;
 
 void timer_init(void) { SysTick_Config(system_core_clock / 1000); }
-
-uint32_t timer_read(void) { return counter; }
 
 //--------------------------------------------------------------------+
 // Interrupt Handlers
 //--------------------------------------------------------------------+
 
-void SysTick_Handler(void) { counter++; }
+void SysTick_Handler(void) { timer_counter++; }

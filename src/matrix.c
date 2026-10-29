@@ -118,14 +118,14 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   // 1. Flush EMA filter and sample live ADC readings
   for (uint32_t step = 0; step < 16; step++) {
     analog_task();
-    for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    for (uint32_t i = 0; i < MATRIX_NUM_ANALOG_KEYS; i++) {
       key_matrix[i].adc_filtered = matrix_analog_read(i);
     }
   }
 
   // 2. Initialize rest values to current live ADC readings
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    raw_boot_rest[i] = analog_read(i);
+    raw_boot_rest[i] = i < MATRIX_NUM_ANALOG_KEYS ? analog_read(i) : 0;
     last_raw_val[i] = raw_boot_rest[i];
     stable_ref[i] = key_matrix[i].adc_filtered;
     key_matrix[i].adc_rest_value = key_matrix[i].adc_filtered;
@@ -143,7 +143,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   while (timer_elapsed(calibration_start) < MATRIX_CALIBRATION_DURATION) {
     analog_task();
 
-    for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    for (uint32_t i = 0; i < MATRIX_NUM_ANALOG_KEYS; i++) {
       const uint16_t new_adc_filtered =
           EMA(matrix_analog_read(i), key_matrix[i].adc_filtered);
 
@@ -155,26 +155,14 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     }
   }
 
-  // 4. Update initial_rest_value in EEPROM to average of actual rest values
-  uint32_t rest_sum = 0;
-  for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    rest_sum += key_matrix[i].adc_rest_value;
-  }
-  uint16_t avg_rest = (uint16_t)(rest_sum / NUM_KEYS);
-  if (avg_rest > 0) {
-    eeconfig_calibration_t calib = eeconfig->calibration;
-    calib.initial_rest_value = avg_rest;
-    EECONFIG_WRITE(calibration, &calib);
-  }
-
-  // 5. Update bottom out values using the fresh rest values
-  for (uint32_t i = 0; i < NUM_KEYS; i++) {
+  // 4. Update bottom out values using the fresh rest values
+  for (uint32_t i = 0; i < MATRIX_NUM_ANALOG_KEYS; i++) {
     raw_boot_rest[i] = analog_read(i);
     key_matrix[i].adc_bottom_out_value =
         matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
   }
 
-  // 6. Update cached switch travel
+  // 5. Update cached switch travel
   matrix_update_calibration();
 }
 
@@ -236,138 +224,142 @@ uint16_t matrix_get_raw_adc(uint8_t key) {
   return 0;
 }
 
-void matrix_scan(void) {
+__attribute__((section(".ramfunc"))) void matrix_scan(void) {
+  static uint32_t last_sweep_count = 0;
+  const uint32_t current_sweep = analog_get_sweep_count();
+  const bool new_sweep = (current_sweep != last_sweep_count);
+  last_sweep_count = current_sweep;
+
   const uint32_t now = timer_read();
   const uint32_t debounce_time = eeconfig->options.debounce_ms;
   const actuation_t *actuation_map = CURRENT_PROFILE.actuation_map;
+  const bool benchmark_active = scan_rate_is_active();
 
   // Only scan keys that are connected to analog inputs
   for (uint32_t i = 0; i < MATRIX_NUM_ANALOG_KEYS; i++) {
-    const uint16_t raw_current = analog_read(i);
-
-    // Dynamic polarity auto-detection for uncalibrated keys
-    if ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_THRESHOLD_MASK) == 0 &&
-        !manual_calib_active) {
-      if (!bitmap_get(key_inverted, i)) {
-        if (raw_current + 150 < raw_boot_rest[i]) {
-          bitmap_set(key_inverted, i, true);
-          key_matrix[i].adc_rest_value = ADC_MAX_VALUE - raw_boot_rest[i];
-          key_matrix[i].adc_filtered = ADC_MAX_VALUE - raw_current;
-          key_matrix[i].adc_bottom_out_value =
-              matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
-        }
-      } else {
-        if (raw_current > raw_boot_rest[i] + 150) {
-          bitmap_set(key_inverted, i, false);
-          key_matrix[i].adc_rest_value = raw_boot_rest[i];
-          key_matrix[i].adc_filtered = raw_current;
-          key_matrix[i].adc_bottom_out_value =
-              matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
-        }
-      }
-    }
-
-    uint16_t raw_val = raw_current;
-    if (bitmap_get(key_inverted, i)) {
-      raw_val = ADC_MAX_VALUE - raw_val;
-    }
-#if defined(MATRIX_INVERT_ADC_VALUES)
-    raw_val = ADC_MAX_VALUE - raw_val;
-#endif
-    const uint16_t prev_filtered = key_matrix[i].adc_filtered;
     const actuation_t *actuation = &actuation_map[i];
+    const uint16_t travel_um = switch_travel_um[i];
+    uint16_t dist = key_matrix[i].distance;
+    uint16_t raw_val = last_raw_val[i];
 
-    // Run-length persistence filter: eliminate single-sample comparator toggle
-    uint16_t effective_raw = prev_filtered;
-    if (raw_val == last_raw_val[i] || abs((int32_t)raw_val - (int32_t)last_raw_val[i]) > 1) {
-      effective_raw = raw_val;
-    }
-    last_raw_val[i] = raw_val;
+    if (new_sweep) {
+      const uint16_t raw_current = analog_read(i);
 
-    uint16_t new_adc_filtered = EMA(effective_raw, prev_filtered);
-    key_matrix[i].adc_filtered = new_adc_filtered;
-
-    // Stability auto-baseline recovery (only when key reading drops below rest)
-    if (key_matrix[i].is_pressed || manual_calib_active) {
-      stable_ref[i] = new_adc_filtered;
-      stable_timer[i] = now;
-    } else {
-      if (abs((int32_t)new_adc_filtered - (int32_t)stable_ref[i]) > 2) {
-        stable_ref[i] = new_adc_filtered;
-        stable_timer[i] = now;
-      } else if (new_adc_filtered < key_matrix[i].adc_rest_value) {
-        if (now - stable_timer[i] >= MATRIX_BASELINE_DOWN_TIME_MS) {
-          key_matrix[i].adc_rest_value = new_adc_filtered;
-          if (manual_calib_status[i] == CALIB_STATE_IDLE) {
+      // Dynamic polarity auto-detection for uncalibrated keys
+      if ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_THRESHOLD_MASK) == 0 &&
+          !manual_calib_active) {
+        if (!bitmap_get(key_inverted, i)) {
+          if (raw_current + 150 < raw_boot_rest[i]) {
+            bitmap_set(key_inverted, i, true);
+            key_matrix[i].adc_rest_value = ADC_MAX_VALUE - raw_boot_rest[i];
+            key_matrix[i].adc_filtered = ADC_MAX_VALUE - raw_current;
             key_matrix[i].adc_bottom_out_value =
                 matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
           }
-          stable_timer[i] = now;
-          stable_ref[i] = new_adc_filtered;
+        } else {
+          if (raw_current > raw_boot_rest[i] + 150) {
+            bitmap_set(key_inverted, i, false);
+            key_matrix[i].adc_rest_value = raw_boot_rest[i];
+            key_matrix[i].adc_filtered = raw_current;
+            key_matrix[i].adc_bottom_out_value =
+                matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+          }
         }
-      } else {
+      }
+
+      raw_val = raw_current;
+      if (bitmap_get(key_inverted, i)) {
+        raw_val = ADC_MAX_VALUE - raw_val;
+      }
+#if defined(MATRIX_INVERT_ADC_VALUES)
+      raw_val = ADC_MAX_VALUE - raw_val;
+#endif
+      const uint16_t prev_filtered = key_matrix[i].adc_filtered;
+      const uint16_t prev_rest = key_matrix[i].adc_rest_value;
+      const uint16_t prev_bot = key_matrix[i].adc_bottom_out_value;
+
+      // Run-length persistence filter: eliminate single-sample comparator toggle
+      uint16_t effective_raw = prev_filtered;
+      if (raw_val == last_raw_val[i] ||
+          abs((int32_t)raw_val - (int32_t)last_raw_val[i]) > 1) {
+        effective_raw = raw_val;
+      }
+      last_raw_val[i] = raw_val;
+
+      uint16_t new_adc_filtered = EMA(effective_raw, prev_filtered);
+      key_matrix[i].adc_filtered = new_adc_filtered;
+
+      // Stability auto-baseline recovery (only when key reading drops below rest)
+      if (key_matrix[i].is_pressed || manual_calib_active) {
+        stable_ref[i] = new_adc_filtered;
         stable_timer[i] = now;
+      } else {
+        if (abs((int32_t)new_adc_filtered - (int32_t)stable_ref[i]) > 2) {
+          stable_ref[i] = new_adc_filtered;
+          stable_timer[i] = now;
+        } else if (new_adc_filtered < key_matrix[i].adc_rest_value) {
+          if (now - stable_timer[i] >= MATRIX_BASELINE_DOWN_TIME_MS) {
+            key_matrix[i].adc_rest_value = new_adc_filtered;
+            if (manual_calib_status[i] == CALIB_STATE_IDLE) {
+              key_matrix[i].adc_bottom_out_value =
+                  matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+            }
+            stable_timer[i] = now;
+            stable_ref[i] = new_adc_filtered;
+          }
+        } else {
+          stable_timer[i] = now;
+        }
       }
-    }
 
-    if (manual_calib_active && manual_calib_status[i] != CALIB_STATE_IDLE) {
-      if (manual_calib_status[i] == CALIB_STATE_WAITING) {
-        if (new_adc_filtered > key_matrix[i].adc_rest_value + 60) {
-          manual_calib_status[i] = CALIB_STATE_RECORDING;
-          manual_calib_peak[i] = new_adc_filtered;
-        } else if (new_adc_filtered + 60 < key_matrix[i].adc_rest_value) {
-          // North-facing switch detected: invert immediately on initial press!
-          bitmap_set(key_inverted, i, !bitmap_get(key_inverted, i));
-          uint16_t old_rest = key_matrix[i].adc_rest_value;
-          uint16_t old_val = new_adc_filtered;
-          key_matrix[i].adc_rest_value = ADC_MAX_VALUE - old_rest;
-          key_matrix[i].adc_filtered = ADC_MAX_VALUE - old_val;
-          new_adc_filtered = key_matrix[i].adc_filtered;
+      if (manual_calib_active && manual_calib_status[i] != CALIB_STATE_IDLE) {
+        if (manual_calib_status[i] == CALIB_STATE_WAITING) {
+          if (new_adc_filtered > key_matrix[i].adc_rest_value + 60) {
+            manual_calib_status[i] = CALIB_STATE_RECORDING;
+            manual_calib_peak[i] = new_adc_filtered;
+          } else if (new_adc_filtered + 60 < key_matrix[i].adc_rest_value) {
+            // North-facing switch detected: invert immediately on initial press!
+            bitmap_set(key_inverted, i, !bitmap_get(key_inverted, i));
+            uint16_t old_rest = key_matrix[i].adc_rest_value;
+            uint16_t old_val = new_adc_filtered;
+            key_matrix[i].adc_rest_value = ADC_MAX_VALUE - old_rest;
+            key_matrix[i].adc_filtered = ADC_MAX_VALUE - old_val;
+            new_adc_filtered = key_matrix[i].adc_filtered;
+            key_matrix[i].adc_bottom_out_value = new_adc_filtered;
+            manual_calib_peak[i] = new_adc_filtered;
+            manual_calib_status[i] = CALIB_STATE_RECORDING;
+          }
+        } else if (manual_calib_status[i] == CALIB_STATE_RECORDING) {
+          if (new_adc_filtered > manual_calib_peak[i]) {
+            manual_calib_peak[i] = new_adc_filtered;
+            key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
+          } else if (new_adc_filtered <= key_matrix[i].adc_rest_value + 30) {
+            manual_calib_status[i] = CALIB_STATE_COMPLETED;
+            key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
+          }
+        }
+      } else if ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_THRESHOLD_MASK) == 0) {
+        // Dynamic auto-calibration running only when no static threshold is set
+        if (new_adc_filtered >=
+            key_matrix[i].adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON) {
           key_matrix[i].adc_bottom_out_value = new_adc_filtered;
-          manual_calib_peak[i] = new_adc_filtered;
-          manual_calib_status[i] = CALIB_STATE_RECORDING;
-        }
-      } else if (manual_calib_status[i] == CALIB_STATE_RECORDING) {
-        if (new_adc_filtered > manual_calib_peak[i]) {
-          manual_calib_peak[i] = new_adc_filtered;
-          key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
-        } else if (new_adc_filtered <= key_matrix[i].adc_rest_value + 30) {
-          manual_calib_status[i] = CALIB_STATE_COMPLETED;
-          key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
         }
       }
-    } else if ((eeconfig->bottom_out_threshold[i] & BOTTOM_OUT_THRESHOLD_MASK) == 0) {
-      // Dynamic auto-calibration running only when no static threshold is set
-      if (new_adc_filtered >=
-          key_matrix[i].adc_bottom_out_value + MATRIX_CALIBRATION_EPSILON) {
-        key_matrix[i].adc_bottom_out_value = new_adc_filtered;
-      }
-    }
 
-    const uint16_t travel_um = switch_travel_um[i];
-    const uint16_t raw_dist =
-        adc_to_distance(new_adc_filtered,
-                        key_matrix[i].adc_rest_value,
-                        key_matrix[i].adc_bottom_out_value,
-                        travel_um);
-    uint16_t dist = key_matrix[i].distance;
-    if (raw_dist == 0 || raw_dist == travel_um ||
-        abs((int32_t)raw_dist - (int32_t)dist) > 3) {
-      dist = raw_dist;
-      key_matrix[i].distance = dist;
+      if (new_adc_filtered != prev_filtered ||
+          key_matrix[i].adc_rest_value != prev_rest ||
+          key_matrix[i].adc_bottom_out_value != prev_bot) {
+        dist = adc_to_distance(new_adc_filtered,
+                               key_matrix[i].adc_rest_value,
+                               key_matrix[i].adc_bottom_out_value,
+                               travel_um);
+        key_matrix[i].distance = dist;
+      }
     }
 
     const uint16_t deact_point = (actuation->actuation_point > MATRIX_HYST_GAP)
                                 ? (actuation->actuation_point - MATRIX_HYST_GAP)
                                 : 0;
-
-    const uint16_t sweep_us = scan_rate_get_sweep_period_us();
-    const uint32_t sweep_cycles = (F_CPU / 1000000u) * sweep_us;
-    const uint16_t raw_sensor_dist =
-        adc_to_distance(raw_val,
-                        key_matrix[i].adc_rest_value,
-                        key_matrix[i].adc_bottom_out_value,
-                        travel_um);
 
     const uint16_t top_dz = actuation->rt_deadzone_top;
     const uint16_t bot_dz = actuation->rt_deadzone_bottom;
@@ -375,45 +367,55 @@ void matrix_scan(void) {
     const uint16_t rt_up = actuation->rt_up == 0 ? actuation->rt_down : actuation->rt_up;
     const uint16_t rt_down = actuation->rt_down;
 
-    if (!key_matrix[i].is_pressed) {
-      bool would_press = false;
-      if (bitmap_get(rapid_trigger_disabled, i) || (rt_down == 0)) {
-        would_press = (raw_sensor_dist >= actuation->actuation_point);
-      } else {
-        if (raw_sensor_dist >= actuation->actuation_point &&
-            (key_matrix[i].key_dir == KEY_DIR_INACTIVE ||
-             key_matrix[i].extremum <= actuation->actuation_point)) {
-          would_press = true;
-        } else if (raw_sensor_dist > top_dz &&
-                   (raw_sensor_dist >= key_matrix[i].extremum + rt_down) &&
-                   (actuation->continuous || raw_sensor_dist >= actuation->actuation_point)) {
-          would_press = true;
+    if (benchmark_active) {
+      const uint16_t sweep_us = scan_rate_get_sweep_period_us();
+      const uint32_t sweep_cycles = (F_CPU / 1000000u) * sweep_us;
+      const uint16_t raw_sensor_dist =
+          adc_to_distance(raw_val,
+                          key_matrix[i].adc_rest_value,
+                          key_matrix[i].adc_bottom_out_value,
+                          travel_um);
+
+      if (!key_matrix[i].is_pressed) {
+        bool would_press = false;
+        if (bitmap_get(rapid_trigger_disabled, i) || (rt_down == 0)) {
+          would_press = (raw_sensor_dist >= actuation->actuation_point);
+        } else {
+          if (raw_sensor_dist >= actuation->actuation_point &&
+              (key_matrix[i].key_dir == KEY_DIR_INACTIVE ||
+               key_matrix[i].extremum <= actuation->actuation_point)) {
+            would_press = true;
+          } else if (raw_sensor_dist > top_dz &&
+                     (raw_sensor_dist >= key_matrix[i].extremum + rt_down) &&
+                     (actuation->continuous || raw_sensor_dist >= actuation->actuation_point)) {
+            would_press = true;
+          }
         }
-      }
-      if (would_press) {
-        if (press_cycle_start[i] == 0) {
-          uint32_t cur = board_cycle_count();
-          press_cycle_start[i] = (cur >= sweep_cycles) ? (cur - sweep_cycles) : cur;
-        }
-      } else {
-        press_cycle_start[i] = 0;
-      }
-    } else {
-      bool would_release = false;
-      if (bitmap_get(rapid_trigger_disabled, i) || (rt_down == 0)) {
-        would_release = (raw_sensor_dist <= deact_point);
-      } else {
-        would_release = (raw_sensor_dist <= deact_point ||
-                         (key_matrix[i].extremum > top_dz &&
-                          raw_sensor_dist + rt_up <= key_matrix[i].extremum));
-      }
-      if (would_release) {
-        if (release_cycle_start[i] == 0) {
-          uint32_t cur = board_cycle_count();
-          release_cycle_start[i] = (cur >= sweep_cycles) ? (cur - sweep_cycles) : cur;
+        if (would_press) {
+          if (press_cycle_start[i] == 0) {
+            uint32_t cur = board_cycle_count();
+            press_cycle_start[i] = (cur >= sweep_cycles) ? (cur - sweep_cycles) : cur;
+          }
+        } else {
+          press_cycle_start[i] = 0;
         }
       } else {
-        release_cycle_start[i] = 0;
+        bool would_release = false;
+        if (bitmap_get(rapid_trigger_disabled, i) || (rt_down == 0)) {
+          would_release = (raw_sensor_dist <= deact_point);
+        } else {
+          would_release = (raw_sensor_dist <= deact_point ||
+                           (key_matrix[i].extremum > top_dz &&
+                            raw_sensor_dist + rt_up <= key_matrix[i].extremum));
+        }
+        if (would_release) {
+          if (release_cycle_start[i] == 0) {
+            uint32_t cur = board_cycle_count();
+            release_cycle_start[i] = (cur >= sweep_cycles) ? (cur - sweep_cycles) : cur;
+          }
+        } else {
+          release_cycle_start[i] = 0;
+        }
       }
     }
 
@@ -494,19 +496,21 @@ void matrix_scan(void) {
         key_matrix[i].is_pressed = next_pressed;
         key_matrix[i].last_state_change_time = now;
 
-        const uint32_t cur = board_cycle_count();
-        if (next_pressed) {
-          if (press_cycle_start[i] != 0 && cur >= press_cycle_start[i]) {
-            uint32_t us = (cur - press_cycle_start[i]) / (F_CPU / 1000000u);
-            scan_rate_record_press_latency((uint16_t)M_MIN(us, UINT16_MAX));
+        if (benchmark_active) {
+          const uint32_t cur = board_cycle_count();
+          if (next_pressed) {
+            if (press_cycle_start[i] != 0 && cur >= press_cycle_start[i]) {
+              uint32_t us = (cur - press_cycle_start[i]) / (F_CPU / 1000000u);
+              scan_rate_record_press_latency((uint16_t)M_MIN(us, UINT16_MAX));
+            }
+            press_cycle_start[i] = 0;
+          } else {
+            if (release_cycle_start[i] != 0 && cur >= release_cycle_start[i]) {
+              uint32_t us = (cur - release_cycle_start[i]) / (F_CPU / 1000000u);
+              scan_rate_record_release_latency((uint16_t)M_MIN(us, UINT16_MAX));
+            }
+            release_cycle_start[i] = 0;
           }
-          press_cycle_start[i] = 0;
-        } else {
-          if (release_cycle_start[i] != 0 && cur >= release_cycle_start[i]) {
-            uint32_t us = (cur - release_cycle_start[i]) / (F_CPU / 1000000u);
-            scan_rate_record_release_latency((uint16_t)M_MIN(us, UINT16_MAX));
-          }
-          release_cycle_start[i] = 0;
         }
       }
     }

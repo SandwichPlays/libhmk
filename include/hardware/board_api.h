@@ -79,4 +79,6 @@ uint32_t board_serial(char *buf);
  *
  * @return Current cycle count
  */
-uint32_t board_cycle_count(void);
+__attribute__((always_inline)) static inline uint32_t board_cycle_count(void) {
+  return *(volatile const uint32_t *)0xE0001004UL;
+}

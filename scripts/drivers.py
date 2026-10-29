@@ -138,6 +138,7 @@ class Driver:
     tinyusb: TinyUSB
     metadata: Metadata
     platformio: PlatformIO | None = None  # None for CMake-only targets (e.g. HPM)
+    hardware_dir: str | None = None
 
 
 STM32F446XX = Driver(
@@ -242,6 +243,55 @@ AT32F405XX = Driver(
             ),
         ),
     ),
+)
+
+AT32F405XB = Driver(
+    platformio=PlatformIO(
+        board="genericAT32F405RBT7-7",
+        ldscript="at32f405xb.ld",
+        framework="at32firmlib",
+        platform="https://github.com/ArteryTek/platform-arterytekat32.git",
+    ),
+    tinyusb=TinyUSB(mcu="at32f402_405"),
+    metadata=Metadata(
+        bootloader=Bootloader(
+            address=0x1FFFA400,
+            magic=0xDEADBEEF,
+        ),
+        flash=Flash(
+            sector_sizes=UniformSectors(
+                size=2048,
+                num_sectors=64,
+            ),
+            empty_value=0xFFFFFFFF,
+        ),
+        adc=ADC(
+            max_resolution=12,
+            input_pins=[
+                "A0",
+                "A1",
+                "A2",
+                "A3",
+                "A4",
+                "A5",
+                "A6",
+                "A7",
+                "B0",
+                "B1",
+                "C0",
+                "C1",
+                "C2",
+                "C3",
+                "C4",
+                "C5",
+            ],
+            to_gpio_array=lambda pins: (
+                [f"GPIO{pin[0]}" for pin in pins],
+                [f"GPIO_PINS_{pin[1:]}" for pin in pins],
+            ),
+        ),
+    ),
+    hardware_dir="at32f405xx",
 )
 
 STM32G431XX = Driver(

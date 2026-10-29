@@ -25,13 +25,13 @@
 #endif
 
 #if !defined(ADC_OVERSAMPLE_RATIO)
-// Hardware oversampling ratio: 16x oversampling in silicon
-#define ADC_OVERSAMPLE_RATIO ADC_OVERSAMPLE_RATIO_16
+// Hardware oversampling ratio: 8x oversampling in silicon
+#define ADC_OVERSAMPLE_RATIO ADC_OVERSAMPLE_RATIO_8
 #endif
 
 #if !defined(ADC_OVERSAMPLE_SHIFT)
-// Hardware oversampling bit shift: 4 bits right shift (16-bit accumulator -> 12-bit clean result)
-#define ADC_OVERSAMPLE_SHIFT ADC_OVERSAMPLE_SHIFT_4
+// Hardware oversampling bit shift: 3 bits right shift (15-bit accumulator -> 12-bit clean result)
+#define ADC_OVERSAMPLE_SHIFT ADC_OVERSAMPLE_SHIFT_3
 #endif
 
 // ADC resolution in bits, set by `scripts/make.py`
