@@ -15,6 +15,9 @@
 
 #pragma once
 
+#define FAST_INLINE_TIMER 1
+#define FAST_INLINE_CYCLE_COUNT 1
+
 //--------------------------------------------------------------------+
 // ADC Configuration
 //--------------------------------------------------------------------+
@@ -24,6 +27,7 @@
 #define ADC_NUM_SAMPLE_CYCLES ADC_SAMPLETIME_1_5
 #endif
 
+#if !defined(ADC_OVERSAMPLE_DISABLE)
 #if !defined(ADC_OVERSAMPLE_RATIO)
 // Hardware oversampling ratio: 8x oversampling in silicon
 #define ADC_OVERSAMPLE_RATIO ADC_OVERSAMPLE_RATIO_8
@@ -32,6 +36,7 @@
 #if !defined(ADC_OVERSAMPLE_SHIFT)
 // Hardware oversampling bit shift: 3 bits right shift (15-bit accumulator -> 12-bit clean result)
 #define ADC_OVERSAMPLE_SHIFT ADC_OVERSAMPLE_SHIFT_3
+#endif
 #endif
 
 // ADC resolution in bits, set by `scripts/make.py`

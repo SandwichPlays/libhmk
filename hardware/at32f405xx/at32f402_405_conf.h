@@ -21,9 +21,14 @@
 // Crystal Configuration
 //--------------------------------------------------------------------+
 
-// We only support the 12 MHz high-speed external crystal
+// Support 8, 12, 16, or 24 MHz high-speed external crystals (USB HS PHY requires 12 MHz)
+_Static_assert(BOARD_HSE_VALUE == 8000000 || BOARD_HSE_VALUE == 12000000 ||
+                   BOARD_HSE_VALUE == 16000000 || BOARD_HSE_VALUE == 24000000,
+               "High-speed external crystal frequency must be 8, 12, 16, or 24 MHz");
+#if defined(BOARD_USB_HS)
 _Static_assert(BOARD_HSE_VALUE == 12000000,
-               "High-speed external crystal frequency must be 12 MHz");
+               "AT32F405 USB High-Speed PHY requires a 12 MHz crystal");
+#endif
 
 /// High-speed external crystal frequency
 #define HEXT_VALUE ((uint32_t)BOARD_HSE_VALUE)

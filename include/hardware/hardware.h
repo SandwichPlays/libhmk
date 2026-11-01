@@ -23,5 +23,8 @@
 
 #include "hardware/analog_api.h"
 #include "hardware/board_api.h"
+#include "hardware/encoder_api.h"
 #include "hardware/flash_api.h"
+#include "hardware/gpio_api.h"
+#include "hardware/rgb_api.h"
 #include "hardware/timer_api.h"

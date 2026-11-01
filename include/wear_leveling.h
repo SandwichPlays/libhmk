@@ -21,8 +21,8 @@
 // Wear Leveling Configuration
 //--------------------------------------------------------------------+
 
-_Static_assert(WL_VIRTUAL_SIZE <= 8192,
-               "WL_VIRTUAL_SIZE must be at most 8192.");
+_Static_assert(WL_VIRTUAL_SIZE <= 32768,
+               "WL_VIRTUAL_SIZE must be at most 32768.");
 _Static_assert(WL_VIRTUAL_SIZE % 4 == 0,
                "WL_VIRTUAL_SIZE must be word-aligned.");
 
@@ -40,7 +40,9 @@ _Static_assert(WL_BACKING_STORE_SIZE <= FLASH_SIZE,
 //--------------------------------------------------------------------+
 
 #define WL_LOG_ENTRY_SIZE 8
+#if WL_VIRTUAL_SIZE <= 8192
 #define WL_MAX_BYTES_PER_ENTRY 6
+#define WL_FIRST_WORD_MAX_BYTES 2
 
 typedef union __attribute__((packed)) {
   struct __attribute__((packed)) {
@@ -50,6 +52,19 @@ typedef union __attribute__((packed)) {
   } fields;
   uint32_t raw[2];
 } wl_log_entry_t;
+#else
+#define WL_MAX_BYTES_PER_ENTRY 5
+#define WL_FIRST_WORD_MAX_BYTES 1
+
+typedef union __attribute__((packed)) {
+  struct __attribute__((packed)) {
+    uint16_t addr;
+    uint8_t len;
+    uint8_t data[WL_MAX_BYTES_PER_ENTRY];
+  } fields;
+  uint32_t raw[2];
+} wl_log_entry_t;
+#endif
 
 _Static_assert(sizeof(wl_log_entry_t) == WL_LOG_ENTRY_SIZE,
                "wl_log_entry_t must be 8 bytes.");

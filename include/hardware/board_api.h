@@ -71,6 +71,7 @@ void board_enter_bootloader(void);
  */
 uint32_t board_serial(char *buf);
 
+#if defined(FAST_INLINE_CYCLE_COUNT)
 /**
  * @brief Get the current cycle count
  *
@@ -82,3 +83,14 @@ uint32_t board_serial(char *buf);
 __attribute__((always_inline)) static inline uint32_t board_cycle_count(void) {
   return *(volatile const uint32_t *)0xE0001004UL;
 }
+#else
+/**
+ * @brief Get the current cycle count
+ *
+ * This function returns the current cycle count of the board's CPU. It can be
+ * used for performance measurement or timing purposes.
+ *
+ * @return Current cycle count
+ */
+uint32_t board_cycle_count(void);
+#endif

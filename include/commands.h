@@ -73,7 +73,16 @@ typedef struct __attribute__((packed)) {
   uint8_t raw;
 } command_in_analog_info_t;
 
-typedef eeconfig_calibration_t command_in_calibration_t;
+#define CALIBRATION_MAX_PACKET_KEYS 59
+#define CALIBRATION_PACKET_KEYS                                                \
+  ((NUM_KEYS) < (CALIBRATION_MAX_PACKET_KEYS) ? (NUM_KEYS)                     \
+                                              : (CALIBRATION_MAX_PACKET_KEYS))
+
+typedef struct __attribute__((packed)) {
+  uint16_t initial_rest_value;
+  uint16_t initial_bottom_out_threshold;
+  uint8_t switch_travel[CALIBRATION_PACKET_KEYS];
+} command_in_calibration_t;
 
 typedef eeconfig_options_t command_in_options_t;
 
@@ -210,7 +219,7 @@ typedef struct __attribute__((packed)) {
     // For `COMMAND_ANALOG_INFO`
     command_out_analog_info_t analog_info[12];
     // For `COMMAND_GET_CALIBRATION`
-    eeconfig_calibration_t calibration;
+    command_in_calibration_t calibration;
     // For `COMMAND_GET_PROFILE`
     uint8_t current_profile;
     // For `COMMAND_GET_OPTIONS`

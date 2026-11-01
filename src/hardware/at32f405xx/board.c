@@ -39,8 +39,18 @@ static void board_clock_init(void) {
   while (crm_hext_stable_wait() == ERROR)
     ;
 
-  // Configure PLL to 216MHz, assuming HSE is 12MHz
+  // Configure PLL to 216MHz (864MHz VCO) from 8, 12, 16, or 24 MHz HSE
+#if BOARD_HSE_VALUE == 8000000
+  crm_pll_config(CRM_PLL_SOURCE_HEXT, 108, 1, CRM_PLL_FP_4);
+#elif BOARD_HSE_VALUE == 12000000
   crm_pll_config(CRM_PLL_SOURCE_HEXT, 72, 1, CRM_PLL_FP_4);
+#elif BOARD_HSE_VALUE == 16000000
+  crm_pll_config(CRM_PLL_SOURCE_HEXT, 108, 2, CRM_PLL_FP_4);
+#elif BOARD_HSE_VALUE == 24000000
+  crm_pll_config(CRM_PLL_SOURCE_HEXT, 72, 2, CRM_PLL_FP_4);
+#else
+#error "Unsupported BOARD_HSE_VALUE for AT32F405"
+#endif
   // Configure PLLU to 48MHz for USB FS
   crm_pllu_div_set(CRM_PLL_FU_18);
   // Enable PLL as system clock source

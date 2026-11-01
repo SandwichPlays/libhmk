@@ -200,6 +200,10 @@ void analog_init(void) {
 
 
 
+static volatile uint32_t analog_sweep_count = 0;
+
+uint32_t analog_get_sweep_count(void) { return analog_sweep_count; }
+
 // --------------------------------------------------------------------
 // Interrupt Handlers
 // --------------------------------------------------------------------
@@ -219,6 +223,7 @@ void isr_dma0(void) {
     }
 
     adc_initialized = true;
+    analog_sweep_count++;
 
     // Re-trigger ADC for next conversion cycle
     adc16_trigger_seq_by_sw(HPM_ADC0);

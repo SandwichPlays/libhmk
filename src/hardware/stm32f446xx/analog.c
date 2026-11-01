@@ -219,6 +219,10 @@ void analog_init(void) {
 
 
 
+static volatile uint32_t analog_sweep_count = 0;
+
+uint32_t analog_get_sweep_count(void) { return analog_sweep_count; }
+
 //--------------------------------------------------------------------+
 // Interrupt Handlers
 //--------------------------------------------------------------------+
@@ -259,6 +263,9 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
     // We initialize all the ADC values when we have gone through all the
     // multiplexer input channels.
     adc_initialized |= (current_mux_channel == 0);
+    if (current_mux_channel == 0) {
+      analog_sweep_count++;
+    }
 
     // Set the multiplexer select pins
     for (uint32_t i = 0; i < ADC_NUM_MUX_SELECT_PINS; i++)
@@ -270,6 +277,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 #else
     // We initialize all the ADC values when we have read all the raw input.
     adc_initialized = true;
+    analog_sweep_count++;
     // Immediately start the next conversion
     HAL_ADC_Start_DMA(&adc_handle, (uint32_t *)adc_buffer,
                       ADC_NUM_MUX_INPUTS + ADC_NUM_RAW_INPUTS);

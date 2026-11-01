@@ -176,7 +176,12 @@ static const uint16_t distance_lut_linear[] = {
 _Static_assert(M_ARRAY_SIZE(distance_lut_linear) == DISTANCE_LUT_SIZE,
                "Invalid linear distance lookup table size");
 
-#if defined(DISTANCE_LUT_LINEAR)
+#if defined(DEFAULT_DISTANCE_LUT)
+static const uint16_t distance_lut_custom[] = DEFAULT_DISTANCE_LUT;
+_Static_assert(M_ARRAY_SIZE(distance_lut_custom) == DISTANCE_LUT_SIZE,
+               "Invalid custom distance lookup table size");
+#define distance_lut_default distance_lut_custom
+#elif defined(DISTANCE_LUT_LINEAR)
 #define distance_lut_default distance_lut_linear
 #else
 #define distance_lut_default distance_lut_yingying

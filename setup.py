@@ -6,23 +6,13 @@ import argparse
 import configparser
 import os
 import scripts.utils as utils
+import scripts.validate as validate
 
 
-if __name__ == "__main__":
-    keyboards = [
-        keyboard
-        for keyboard in os.listdir("keyboards")
-        if os.path.isdir(os.path.join("keyboards", keyboard))
-    ]
-
-    parser = argparse.ArgumentParser(description="PlatformIO Project Setup")
-    parser.add_argument(
-        "--keyboard", "-k", choices=keyboards, required=True, help="Select a keyboard"
-    )
-    args = parser.parse_args()
-
-    keyboard: str = args.keyboard
+def create_env_section(keyboard: str) -> dict[str, str] | None:
     driver = utils.get_driver(keyboard)
+    if driver.platformio is None:
+        return None
 
     build_flags = ["${env.build_flags}"]
     build_src_flags = [
@@ -45,8 +35,7 @@ if __name__ == "__main__":
     ]
     lib_deps = ["https://github.com/hathach/tinyusb.git#0.20.0"]
 
-    pio_config = configparser.ConfigParser()
-    pio_config[f"env:{keyboard}"] = {
+    return {
         "board": driver.platformio.board,
         "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
         "build_flags": "\n".join(build_flags),
@@ -59,5 +48,40 @@ if __name__ == "__main__":
         "upload_protocol": "dfu",
     }
 
-    with open("platformio.ini", "w") as f:
-        pio_config.write(f)
+
+if __name__ == "__main__":
+    keyboards = sorted(
+        keyboard
+        for keyboard in os.listdir("keyboards")
+        if os.path.isdir(os.path.join("keyboards", keyboard))
+        and os.path.isfile(os.path.join("keyboards", keyboard, "keyboard.json"))
+    )
+
+    parser = argparse.ArgumentParser(description="PlatformIO Project Setup & Validator")
+    parser.add_argument(
+        "--keyboard", "-k", choices=keyboards, help="Select a single keyboard"
+    )
+    parser.add_argument(
+        "--all", "-a", action="store_true", help="Generate platformio.ini for all PlatformIO keyboards"
+    )
+    parser.add_argument(
+        "--check", "-c", action="store_true", help="Validate keyboard JSON(s) without modifying platformio.ini"
+    )
+    args = parser.parse_args()
+
+    target_keyboards = keyboards if (args.all or not args.keyboard) else [args.keyboard]
+
+    for kb in target_keyboards:
+        validate.validate_keyboard(kb)
+        print(f"[OK] Validated keyboards/{kb}/keyboard.json")
+
+    if not args.check:
+        pio_config = configparser.ConfigParser()
+        for kb in target_keyboards:
+            sec = create_env_section(kb)
+            if sec is not None:
+                pio_config[f"env:{kb}"] = sec
+
+        with open("platformio.ini", "w") as f:
+            pio_config.write(f)
+        print(f"Generated platformio.ini with {len(pio_config.sections())} environment(s).")

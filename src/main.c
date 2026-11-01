@@ -26,6 +26,8 @@
 #include "wear_leveling.h"
 #include "xinput.h"
 #include "encoder.h"
+#include "keyboard_hooks.h"
+#include "rgb.h"
 #include "scan_rate.h"
 
 int main(void) {
@@ -52,6 +54,8 @@ int main(void) {
 #if defined(ENCODER_ENABLE)
   encoder_init();
 #endif
+  rgb_init();
+  board_init_user();
 
   tud_init(BOARD_TUD_RHPORT);
 
@@ -66,6 +70,7 @@ int main(void) {
 #if defined(ENCODER_ENABLE)
     encoder_task();
 #endif
+    rgb_task();
   }
 
   return 0;

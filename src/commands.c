@@ -98,11 +98,25 @@ void command_process(const uint8_t *buf) {
     break;
   }
   case COMMAND_GET_CALIBRATION: {
-    out->calibration = eeconfig->calibration;
+    out->calibration.initial_rest_value =
+        eeconfig->calibration.initial_rest_value;
+    out->calibration.initial_bottom_out_threshold =
+        eeconfig->calibration.initial_bottom_out_threshold;
+    memcpy(out->calibration.switch_travel, eeconfig->calibration.switch_travel,
+           CALIBRATION_PACKET_KEYS);
     break;
   }
   case COMMAND_SET_CALIBRATION: {
-    success = EECONFIG_WRITE(calibration, &in->calibration);
+    eeconfig_calibration_t new_cal;
+    new_cal.initial_rest_value = in->calibration.initial_rest_value;
+    new_cal.initial_bottom_out_threshold =
+        in->calibration.initial_bottom_out_threshold;
+    memcpy(new_cal.switch_travel, in->calibration.switch_travel,
+           CALIBRATION_PACKET_KEYS);
+    for (uint32_t i = CALIBRATION_PACKET_KEYS; i < NUM_KEYS; i++) {
+      new_cal.switch_travel[i] = in->calibration.switch_travel[0];
+    }
+    success = EECONFIG_WRITE(calibration, &new_cal);
     if (success) {
       matrix_update_calibration();
     }

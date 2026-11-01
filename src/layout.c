@@ -20,6 +20,7 @@
 #include "eeconfig.h"
 #include "hardware/hardware.h"
 #include "hid.h"
+#include "keyboard_hooks.h"
 #include "keycodes.h"
 #include "lib/bitmap.h"
 #include "matrix.h"
@@ -170,6 +171,10 @@ __attribute__((section(".ramfunc"))) void layout_task(void) {
       continue;
 
     if (k->is_pressed && !last_key_press) {
+      if (!key_event_user((uint8_t)i, true)) {
+        bitmap_set(key_press_states, i, k->is_pressed);
+        continue;
+      }
       // Key press event
       const uint8_t keycode = layout_get_keycode(current_layer, i);
       const uint8_t ak_index = advanced_key_indices[current_layer][i];
@@ -192,6 +197,10 @@ __attribute__((section(".ramfunc"))) void layout_task(void) {
         has_non_tap_hold_press |= (keycode != KC_NO);
       }
     } else if (!k->is_pressed && last_key_press) {
+      if (!key_event_user((uint8_t)i, false)) {
+        bitmap_set(key_press_states, i, k->is_pressed);
+        continue;
+      }
       // Key release event
       const uint8_t keycode = active_keycodes[i];
       const uint8_t ak_index = active_advanced_keys[i];
@@ -246,6 +255,7 @@ __attribute__((section(".ramfunc"))) void layout_task(void) {
 
   // Process deferred actions for the next matrix scan
   deferred_action_process();
+  layout_task_user();
 }
 
 /**

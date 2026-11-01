@@ -18,8 +18,22 @@
 #include "distance.h"
 #include "eeconfig.h"
 #include "hardware/hardware.h"
+#include "keyboard_hooks.h"
 #include "lib/bitmap.h"
 #include "scan_rate.h"
+
+#if defined(ANALOG_KEY_LIST)
+static const uint8_t analog_key_list[MATRIX_NUM_ANALOG_KEYS] = ANALOG_KEY_LIST;
+#define ANALOG_KEY_AT(idx) (analog_key_list[(idx)])
+#else
+#define ANALOG_KEY_AT(idx) (idx)
+#endif
+
+#if defined(DIGITAL_ENABLE)
+static const uint8_t digital_key_map[DIGITAL_KEY_COUNT] = DIGITAL_KEY_MAP;
+static bool digital_raw_states[DIGITAL_KEY_COUNT];
+static uint32_t digital_last_change[DIGITAL_KEY_COUNT];
+#endif
 
 // Exponential moving average (EMA) filter with symmetric half-step rounding
 #define EMA(x, y)                                                              \
@@ -94,7 +108,12 @@ uint16_t matrix_get_travel_um(uint8_t key) {
   return 3600;
 }
 
-void matrix_init(void) { matrix_recalibrate(false); }
+void matrix_init(void) {
+#if defined(DIGITAL_ENABLE)
+  digital_gpio_init();
+#endif
+  matrix_recalibrate(false);
+}
 
 void matrix_recalibrate(bool reset_bottom_out_threshold) {
   if (reset_bottom_out_threshold) {
@@ -119,15 +138,16 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   // 1. Flush EMA filter and sample live ADC readings
   for (uint32_t step = 0; step < 16; step++) {
     analog_task();
-    for (uint32_t i = 0; i < MATRIX_NUM_ANALOG_KEYS; i++) {
+    for (uint32_t idx = 0; idx < MATRIX_NUM_ANALOG_KEYS; idx++) {
+      const uint32_t i = ANALOG_KEY_AT(idx);
       key_matrix[i].adc_filtered = matrix_analog_read(i);
     }
   }
 
   // 2. Initialize rest values to current live ADC readings
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
-    raw_boot_rest[i] = i < MATRIX_NUM_ANALOG_KEYS ? analog_read(i) : 0;
-    last_raw_val[i] = raw_boot_rest[i];
+    raw_boot_rest[i] = 0;
+    last_raw_val[i] = 0;
     stable_ref[i] = key_matrix[i].adc_filtered;
     key_matrix[i].adc_rest_value = key_matrix[i].adc_filtered;
     key_matrix[i].distance = 0;
@@ -138,13 +158,19 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     release_cycle_start[i] = 0;
     stable_timer[i] = timer_read();
   }
+  for (uint32_t idx = 0; idx < MATRIX_NUM_ANALOG_KEYS; idx++) {
+    const uint32_t i = ANALOG_KEY_AT(idx);
+    raw_boot_rest[i] = analog_read(i);
+    last_raw_val[i] = raw_boot_rest[i];
+  }
 
   // 3. Track resting noise during calibration duration
   const uint32_t calibration_start = timer_read();
   while (timer_elapsed(calibration_start) < MATRIX_CALIBRATION_DURATION) {
     analog_task();
 
-    for (uint32_t i = 0; i < MATRIX_NUM_ANALOG_KEYS; i++) {
+    for (uint32_t idx = 0; idx < MATRIX_NUM_ANALOG_KEYS; idx++) {
+      const uint32_t i = ANALOG_KEY_AT(idx);
       const uint16_t new_adc_filtered =
           EMA(matrix_analog_read(i), key_matrix[i].adc_filtered);
 
@@ -157,7 +183,8 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   }
 
   // 4. Update bottom out values using the fresh rest values
-  for (uint32_t i = 0; i < MATRIX_NUM_ANALOG_KEYS; i++) {
+  for (uint32_t idx = 0; idx < MATRIX_NUM_ANALOG_KEYS; idx++) {
+    const uint32_t i = ANALOG_KEY_AT(idx);
     raw_boot_rest[i] = analog_read(i);
     key_matrix[i].adc_bottom_out_value =
         matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
@@ -237,7 +264,8 @@ __attribute__((section(".ramfunc"))) void matrix_scan(void) {
   const bool benchmark_active = scan_rate_is_active();
 
   // Only scan keys that are connected to analog inputs
-  for (uint32_t i = 0; i < MATRIX_NUM_ANALOG_KEYS; i++) {
+  for (uint32_t idx = 0; idx < MATRIX_NUM_ANALOG_KEYS; idx++) {
+    const uint32_t i = ANALOG_KEY_AT(idx);
     const actuation_t *actuation = &actuation_map[i];
     const uint16_t travel_um = switch_travel_um[i];
     uint16_t dist = key_matrix[i].distance;
@@ -516,6 +544,28 @@ __attribute__((section(".ramfunc"))) void matrix_scan(void) {
       }
     }
   }
+
+#if defined(DIGITAL_ENABLE)
+  digital_gpio_scan(digital_raw_states);
+  for (uint32_t d = 0; d < DIGITAL_KEY_COUNT; d++) {
+    const uint8_t k = digital_key_map[d];
+    if (k == 0 || k > NUM_KEYS) continue;
+    const uint8_t key_idx = k - 1;
+    const bool raw_pressed = digital_raw_states[d];
+    if (raw_pressed != key_matrix[key_idx].is_pressed) {
+      if (now - digital_last_change[d] >= DIGITAL_DEBOUNCE_MS) {
+        key_matrix[key_idx].is_pressed = raw_pressed;
+        key_matrix[key_idx].distance = raw_pressed ? switch_travel_um[key_idx] : 0;
+        key_matrix[key_idx].last_state_change_time = now;
+        digital_last_change[d] = now;
+      }
+    } else {
+      digital_last_change[d] = now;
+    }
+  }
+#endif
+
+  matrix_scan_user();
 }
 
 void matrix_disable_rapid_trigger(uint8_t key, bool disable) {
