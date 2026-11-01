@@ -98,23 +98,40 @@ void command_process(const uint8_t *buf) {
     break;
   }
   case COMMAND_GET_CALIBRATION: {
+    const uint8_t offset = in->get_calibration.offset;
+    COMMAND_VERIFY(offset < NUM_KEYS);
+
     out->calibration.initial_rest_value =
         eeconfig->calibration.initial_rest_value;
     out->calibration.initial_bottom_out_threshold =
         eeconfig->calibration.initial_bottom_out_threshold;
-    memcpy(out->calibration.switch_travel, eeconfig->calibration.switch_travel,
-           CALIBRATION_PACKET_KEYS);
+    const uint32_t copy_len = M_MIN(
+        (uint32_t)sizeof(out->calibration.switch_travel),
+        (uint32_t)(NUM_KEYS - offset));
+    memcpy(out->calibration.switch_travel,
+           eeconfig->calibration.switch_travel + offset, copy_len);
     break;
   }
   case COMMAND_SET_CALIBRATION: {
-    eeconfig_calibration_t new_cal;
+    const uint8_t offset = in->calibration.offset;
+    const uint8_t len = in->calibration.len;
+    COMMAND_VERIFY(offset < NUM_KEYS);
+
+    eeconfig_calibration_t new_cal = eeconfig->calibration;
     new_cal.initial_rest_value = in->calibration.initial_rest_value;
     new_cal.initial_bottom_out_threshold =
         in->calibration.initial_bottom_out_threshold;
-    memcpy(new_cal.switch_travel, in->calibration.switch_travel,
-           CALIBRATION_PACKET_KEYS);
-    for (uint32_t i = CALIBRATION_PACKET_KEYS; i < NUM_KEYS; i++) {
-      new_cal.switch_travel[i] = in->calibration.switch_travel[0];
+
+    if (len == 0) {
+      // Legacy single-packet call (len == 0, offset == first travel byte)
+      const uint32_t legacy_len = M_MIN((uint32_t)NUM_KEYS, 59u);
+      const uint8_t *raw_travel = &in->calibration.offset;
+      memcpy(new_cal.switch_travel, raw_travel, legacy_len);
+    } else {
+      COMMAND_VERIFY(len <= CALIBRATION_MAX_PACKET_KEYS &&
+                     len <= NUM_KEYS - offset);
+      memcpy(new_cal.switch_travel + offset, in->calibration.switch_travel,
+             len);
     }
     success = EECONFIG_WRITE(calibration, &new_cal);
     if (success) {

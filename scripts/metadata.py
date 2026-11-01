@@ -84,6 +84,7 @@ def keyboard_metadata_def():
         "numLayers": kb_json.num_layers,
         "numKeys": kb_json.num_keys,
         "numAdvancedKeys": kb_json.num_advanced_keys,
+        "analogKeys": sorted(utils.get_analog_key_set(kb_json)),
         "layout": layout_dict,
         "encoders": layout_dict.get("encoders"),
         "defaultKeymaps": utils.resolve_default_keymaps(kb_json),

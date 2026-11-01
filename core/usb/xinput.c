@@ -164,6 +164,8 @@ void xinput_process(uint8_t key) {
     break;
   }
   case GP_BUTTON_LS_UP ... GP_BUTTON_RT: {
+    if (!matrix_is_analog_key(key))
+      break;
     // Only update and mark dirty if the key is actually contributing
     if (k->distance > 0) {
       uint32_t norm_dist = ((uint32_t)k->distance * 10000) / matrix_get_travel_um(key);

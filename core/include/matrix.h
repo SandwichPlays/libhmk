@@ -173,6 +173,14 @@ void matrix_update_calibration(void);
 uint16_t matrix_get_travel_um(uint8_t key);
 
 /**
+ * @brief Check if a key is connected to an analog Hall-effect sensor
+ *
+ * @param key Key index
+ * @return true if analog Hall key, false if digital/encoder key
+ */
+bool matrix_is_analog_key(uint8_t key);
+
+/**
  * @brief Check if a key has inverted polarity (North-facing magnet)
  *
  * @param key Key index

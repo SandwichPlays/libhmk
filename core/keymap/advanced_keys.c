@@ -59,14 +59,16 @@ static void advanced_key_null_bind(const advanced_key_event_t *event) {
       state->keycodes[1] != KC_NO,
   };
   if (is_pressed[0] & is_pressed[1]) {
+    const bool both_analog =
+        matrix_is_analog_key(keys[0]) && matrix_is_analog_key(keys[1]);
     // Both keys are pressed so we perform the Null Bind resolution.
-    if ((null_bind->bottom_out_point > 0) &&
+    if (both_analog && (null_bind->bottom_out_point > 0) &&
         ((key_matrix[keys[0]].distance >= null_bind->bottom_out_point) &
          (key_matrix[keys[1]].distance >= null_bind->bottom_out_point)))
       // Input on both bottom out is enabled and both keys are bottomed out so
       // we register both keys.
       is_pressed[0] = is_pressed[1] = true;
-    else if (null_bind->behavior == NB_BEHAVIOR_DISTANCE) {
+    else if (both_analog && null_bind->behavior == NB_BEHAVIOR_DISTANCE) {
       // Always compare the distance, regardless of the event type. If there is
       // a tie between the travel distances, the last pressed key is
       // prioritized.
@@ -74,16 +76,20 @@ static void advanced_key_null_bind(const advanced_key_event_t *event) {
                           key_matrix[keys[index ^ 1]].distance;
       is_pressed[index ^ 1] = !is_pressed[index];
     } else if (event->type == AK_EVENT_TYPE_PRESS) {
-      // Other behaviors only require comparison on press events.
+      // Other behaviors (or digital fallback) only require comparison on press events.
+      const uint8_t eff_behavior =
+          (!both_analog && null_bind->behavior == NB_BEHAVIOR_DISTANCE)
+              ? NB_BEHAVIOR_LAST
+              : null_bind->behavior;
       is_pressed[index] =
-          (null_bind->behavior != NB_BEHAVIOR_NEUTRAL) &
-          ((null_bind->behavior == NB_BEHAVIOR_LAST) |
-           ((null_bind->behavior == NB_BEHAVIOR_PRIMARY) & (index == 0)) |
-           ((null_bind->behavior == NB_BEHAVIOR_SECONDARY) & (index == 1)));
+          (eff_behavior != NB_BEHAVIOR_NEUTRAL) &
+          ((eff_behavior == NB_BEHAVIOR_LAST) |
+           ((eff_behavior == NB_BEHAVIOR_PRIMARY) & (index == 0)) |
+           ((eff_behavior == NB_BEHAVIOR_SECONDARY) & (index == 1)));
       // Only one key can be registered at a time except for the
       // `NB_BEHAVIOR_NEUTRAL`.
       is_pressed[index ^ 1] =
-          (null_bind->behavior != NB_BEHAVIOR_NEUTRAL) & !is_pressed[index];
+          (eff_behavior != NB_BEHAVIOR_NEUTRAL) & !is_pressed[index];
     } else {
       // No action is required for other event types.
       is_pressed[0] = state->is_pressed[0];
@@ -105,6 +111,8 @@ static void advanced_key_null_bind(const advanced_key_event_t *event) {
 }
 
 static void advanced_key_dynamic_keystroke(const advanced_key_event_t *event) {
+  if (!matrix_is_analog_key(event->key))
+    return;
   static deferred_action_t deferred_action = {0};
 
   const dynamic_keystroke_t *dks =

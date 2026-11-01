@@ -46,6 +46,20 @@ static uint32_t digital_last_change[DIGITAL_KEY_COUNT];
 // Bitmap for tracking which keys have inverted polarity (North-facing magnet)
 static bitmap_t key_inverted[] = MAKE_BITMAP(NUM_KEYS);
 
+bool matrix_is_analog_key(uint8_t key) {
+  if (key >= NUM_KEYS)
+    return false;
+#if defined(ANALOG_KEY_LIST)
+  for (uint32_t idx = 0; idx < MATRIX_NUM_ANALOG_KEYS; idx++) {
+    if (analog_key_list[idx] == key)
+      return true;
+  }
+  return false;
+#else
+  return key < MATRIX_NUM_ANALOG_KEYS;
+#endif
+}
+
 bool matrix_is_key_inverted(uint8_t key) {
   if (key < NUM_KEYS)
     return bitmap_get(key_inverted, key);
@@ -198,6 +212,10 @@ void matrix_start_manual_calibration(const uint8_t *keys, uint8_t count) {
   matrix_recalibrate(false);
   manual_calib_active = true;
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
+    if (!matrix_is_analog_key((uint8_t)i)) {
+      manual_calib_status[i] = CALIB_STATE_IDLE;
+      continue;
+    }
     bool target = (count == 0);
     if (!target && keys != NULL) {
       for (uint8_t k = 0; k < count; k++) {
