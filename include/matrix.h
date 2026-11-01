@@ -26,10 +26,15 @@
 #define MATRIX_CALIBRATION_DURATION 500
 #endif
 
-#if !defined(MATRIX_EMA_ALPHA_EXPONENT)
-// Exponent of the alpha parameter of the exponential moving average (EMA)
-// filter used to smooth the ADC values. Set to 0 to bypass EMA completely.
-#define MATRIX_EMA_ALPHA_EXPONENT 3
+#if !defined(MATRIX_EMA_ALPHA_NUMERATOR)
+// Numerator of the alpha parameter (alpha = NUMERATOR / 16) of the exponential
+// moving average (EMA) filter used to smooth ADC values.
+// 2 = 2/16 (exponent 3), 3 = 3/16 (midpoint), 4 = 4/16 (exponent 2).
+#define MATRIX_EMA_ALPHA_NUMERATOR 3
+#endif
+
+#if !defined(MATRIX_EMA_ALPHA_SHIFT)
+#define MATRIX_EMA_ALPHA_SHIFT 4
 #endif
 
 #if !defined(MATRIX_CALIBRATION_EPSILON)

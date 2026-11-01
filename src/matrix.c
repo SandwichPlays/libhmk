@@ -23,10 +23,11 @@
 
 // Exponential moving average (EMA) filter with symmetric half-step rounding
 #define EMA(x, y)                                                              \
-  (((uint32_t)(x) +                                                            \
-    ((uint32_t)(y) * ((1 << MATRIX_EMA_ALPHA_EXPONENT) - 1)) +                 \
-    (1 << (MATRIX_EMA_ALPHA_EXPONENT - 1))) >>                                 \
-   MATRIX_EMA_ALPHA_EXPONENT)
+  ((((uint32_t)(x) * (MATRIX_EMA_ALPHA_NUMERATOR)) +                           \
+    ((uint32_t)(y) *                                                           \
+     ((1 << (MATRIX_EMA_ALPHA_SHIFT)) - (MATRIX_EMA_ALPHA_NUMERATOR))) +       \
+    (1 << ((MATRIX_EMA_ALPHA_SHIFT) - 1))) >>                                  \
+   (MATRIX_EMA_ALPHA_SHIFT))
 
 // Bitmap for tracking which keys have inverted polarity (North-facing magnet)
 static bitmap_t key_inverted[] = MAKE_BITMAP(NUM_KEYS);
