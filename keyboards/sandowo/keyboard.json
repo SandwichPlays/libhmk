@@ -2,126 +2,42 @@
   "name": "SandOwO",
   "manufacturer": "Sando",
   "maintainer": "Sando",
+  "mcu": "at32f405rc",
+  "crystal_hz": 12000000,
   "usb": {
     "vid": "0x5A4E",
     "pid": "0x0004",
     "port": "hs"
   },
-  "keyboard": {
-    "num_profiles": 4,
-    "num_layers": 4,
-    "num_keys": 7,
-    "num_advanced_keys": 8
-  },
-  "hardware": {
-    "hse_value": 12000000,
-    "driver": "at32f405xx"
-  },
-  "analog": {
-    "raw": {
-      "input": [
-        "A4",
-        "A6",
-        "C5",
-        "B1"
-      ],
-      "vector": [
-        4,
-        3,
-        2,
-        1
-      ]
-    }
-  },
-  "calibration": {
-    "initial_rest_value": 2400,
-    "initial_bottom_out_threshold": 700,
-    "switch_travel": 3.6
+  "switch": "yingying_dual_lights_max",
+  "hall": {
+    "pins": ["B1", "C5", "A6", "A4"],
+    "rest_adc": 2400
   },
   "encoders": [
     {
-      "pins": [
-        "C7",
-        "C6"
-      ],
-      "keys": [
-        5,
-        4
-      ],
-      "timer": "TMR3",
+      "pins": ["C7", "C6"],
+      "keys": [5, 4],
       "resolution": 4,
       "button_pin": "B10",
-      "button_key": 6
+      "button_key": 6,
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 1
     }
   ],
   "layout": {
-    "keymap": [
+    "keys": [
       [
-        {
-          "key": 0,
-          "y": 1.5
-        },
-        {
-          "key": 1
-        },
-        {
-          "key": 2
-        },
-        {
-          "key": 3
-        }
+        { "key": 0, "y": 1.5 },
+        { "key": 1 },
+        { "key": 2 },
+        { "key": 3 }
       ]
-    ],
-    "encoders": [
-      {
-        "keys": [
-          4,
-          5
-        ],
-        "buttonKey": 6,
-        "x": 0,
-        "y": 0,
-        "w": 1,
-        "h": 1
-      }
     ]
   },
   "keymap": [
-    [
-      "KC_Z",
-      "KC_X",
-      "KC_C",
-      "KC_V",
-      "KC_VOLD",
-      "KC_VOLU",
-      "KC_MUTE"
-    ],
-    [
-      "_______",
-      "_______",
-      "_______",
-      "_______",
-      "_______",
-      "_______",
-      "_______"
-    ],
-    [
-      "_______",
-      "_______",
-      "_______",
-      "_______",
-      "_______",
-      "_______",
-      "_______"
-    ],
-    [
-      "_______",
-      "_______",
-      "_______",
-      "_______",
-      "_______",
-      "_______",
-      "_______"
-    ]
+    ["KC_Z", "KC_X", "KC_C", "KC_V", "KC_VOLD", "KC_VOLU", "KC_MUTE"]
   ]
 }

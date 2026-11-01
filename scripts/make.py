@@ -23,15 +23,14 @@ SetOption("num_jobs", 4)
 
 keyboard = env["PIOENV"]
 
-# Load JSON files, switch curve, and driver
+# Load JSON files, switch curve, and MCU driver
 kb_json = utils.get_kb_json(keyboard)
 sw_json = utils.get_switch_json(kb_json.switch)
 driver = utils.get_driver(keyboard)
-driver_name = kb_json.hardware.driver
-driver_dir = driver.hardware_dir or driver_name
+mcu_dir = driver.mcu_dir or f"mcu/{kb_json.mcu.lower()}"
 
-# Add source filter for driver source files
-env.Append(SRC_FILTER=["-<hardware/>", f"+<hardware/{driver_dir}/>"])
+# Add source filter for MCU port source files
+env.Append(SRC_FILTER=[f"+<{mcu_dir}/src/>"])
 
 # Compile optional per-keyboard custom hook file keyboards/<board>/keyboard.c if present
 kb_custom_src = os.path.join("keyboards", keyboard, "keyboard.c")
@@ -58,10 +57,10 @@ env.Append(LINKFLAGS=["-O3"])
 # Build Flags
 build_flags = utils.CompilerFlags()
 
-# Include headers. We prioritize including driver and keyboard headers.
-build_flags.include(f"hardware/{driver_dir}")
+# Include headers. We prioritize including MCU port, keyboard, and core headers.
+build_flags.include(f"{mcu_dir}/include")
 build_flags.include(f"keyboards/{keyboard}")
-build_flags.include("include")
+build_flags.include("core/include")
 
 # Bootloader Configuration
 build_flags.define("BOOTLOADER_ADDR", driver.metadata.bootloader.address)
@@ -85,8 +84,8 @@ match driver.metadata.flash.sector_sizes:
 build_flags.define("CFG_TUSB_MCU", f"OPT_MCU_{driver.tinyusb.mcu.upper()}")
 
 # Clock Configuration
-build_flags.define("BOARD_HSE_VALUE", kb_json.hardware.hse_value)
-build_flags.define("HSE_VALUE", kb_json.hardware.hse_value)
+build_flags.define("BOARD_HSE_VALUE", kb_json.crystal_hz)
+build_flags.define("HSE_VALUE", kb_json.crystal_hz)
 
 # USB Configuration
 if kb_json.usb.port == KeyboardUSBPort.FULL_SPEED:
@@ -101,48 +100,48 @@ build_flags.define("USB_PRODUCT_ID", kb_json.usb.pid)
 # Switch LUT Configuration
 build_flags.define("DEFAULT_DISTANCE_LUT", utils.to_c_array(sw_json.lut))
 
-# Analog Configuration
+# Hall / Analog Configuration
 build_flags.define("ADC_NUM_CHANNELS", len(driver.metadata.adc.input_pins))
 build_flags.define("ADC_RESOLUTION", utils.get_adc_resolution(kb_json, driver))
 
-if kb_json.analog.invert_adc:
+if kb_json.hall.invert_adc:
     build_flags.define("MATRIX_INVERT_ADC_VALUES")
 
-if kb_json.analog.delay is not None:
-    build_flags.define("ADC_SAMPLE_DELAY", kb_json.analog.delay)
+if kb_json.hall.mux_delay_us is not None:
+    build_flags.define("ADC_SAMPLE_DELAY", kb_json.hall.mux_delay_us)
 
-if kb_json.analog.oversample is not None:
-    os_pair = driver.metadata.adc.oversample_map[kb_json.analog.oversample]
+if kb_json.hall.oversample is not None:
+    os_pair = driver.metadata.adc.oversample_map[kb_json.hall.oversample]
     if os_pair is None:
         build_flags.define("ADC_OVERSAMPLE_DISABLE")
     else:
         build_flags.define("ADC_OVERSAMPLE_RATIO", os_pair[0])
         build_flags.define("ADC_OVERSAMPLE_SHIFT", os_pair[1])
 
-if kb_json.analog.sample_cycles is not None:
-    sc_macro = driver.metadata.adc.sample_cycles_map[kb_json.analog.sample_cycles]
+if kb_json.hall.sample_cycles is not None:
+    sc_macro = driver.metadata.adc.sample_cycles_map[kb_json.hall.sample_cycles]
     build_flags.define("ADC_NUM_SAMPLE_CYCLES", sc_macro)
 
-# Raw ADC Input Configuration
-if kb_json.analog.raw is not None:
-    raw = kb_json.analog.raw
-    assert raw.vector is not None
+# Direct ADC Input Configuration (convert 0-indexed key to 1-indexed C key where 0 = unconnected)
+if kb_json.hall.pins is not None:
+    assert kb_json.hall.keys is not None
+    c_raw_vector = [0 if k is None else k + 1 for k in kb_json.hall.keys]
 
-    build_flags.define("ADC_NUM_RAW_INPUTS", len(raw.input))
+    build_flags.define("ADC_NUM_RAW_INPUTS", len(kb_json.hall.pins))
     build_flags.define(
         "ADC_RAW_INPUT_CHANNELS",
-        utils.to_c_array(driver.metadata.adc.to_adc_inputs(raw.input)),
+        utils.to_c_array(driver.metadata.adc.to_adc_inputs(kb_json.hall.pins)),
     )
-    build_flags.define("ADC_RAW_INPUT_VECTOR", utils.to_c_array(raw.vector))
+    build_flags.define("ADC_RAW_INPUT_VECTOR", utils.to_c_array(c_raw_vector))
 
-# Analog Multiplexer ADC Input Configuration
-if kb_json.analog.mux is not None:
-    mux = kb_json.analog.mux
+# Analog Multiplexer ADC Input Configuration (convert 0-indexed key to 1-indexed C key where 0 = unconnected)
+if kb_json.hall.mux is not None:
+    mux = kb_json.hall.mux
 
-    build_flags.define("ADC_NUM_MUX_INPUTS", len(mux.input))
+    build_flags.define("ADC_NUM_MUX_INPUTS", len(mux.pins))
     build_flags.define(
         "ADC_MUX_INPUT_CHANNELS",
-        utils.to_c_array(driver.metadata.adc.to_adc_inputs(mux.input)),
+        utils.to_c_array(driver.metadata.adc.to_adc_inputs(mux.pins)),
     )
     build_flags.define("ADC_NUM_MUX_SELECT_PINS", len(mux.select))
 
@@ -150,12 +149,15 @@ if kb_json.analog.mux is not None:
     build_flags.define("ADC_MUX_SELECT_PORTS", utils.to_c_array(ports))
     build_flags.define("ADC_MUX_SELECT_PINS", utils.to_c_array(pin_nums))
 
+    c_mux_matrix = [
+        [0 if k is None else k + 1 for k in row] for row in mux.matrix
+    ]
     build_flags.define(
-        "ADC_MUX_INPUT_MATRIX", utils.to_c_array(list(map(list, zip(*mux.matrix))))
+        "ADC_MUX_INPUT_MATRIX", utils.to_c_array(list(map(list, zip(*c_mux_matrix))))
     )
 
 # Exact list of 0-indexed analog Hall keys so mux/hybrid boards never calibrate digital/encoder keys
-analog_keys_0idx = sorted(k - 1 for k in utils.get_analog_key_set(kb_json))
+analog_keys_0idx = sorted(utils.get_analog_key_set(kb_json))
 if len(analog_keys_0idx) > 0:
     build_flags.define("ANALOG_KEY_COUNT", len(analog_keys_0idx))
     build_flags.define("ANALOG_KEY_LIST", utils.to_c_array(analog_keys_0idx))
@@ -176,7 +178,7 @@ if kb_json.digital is not None:
         build_flags.define(
             "DIGITAL_DIRECT_ACTIVE_LOW", 1 if direct.active_low else 0
         )
-        digital_key_map.extend(direct.keys)
+        digital_key_map.extend(k + 1 for k in direct.keys)
 
     if digital.matrix is not None and len(digital.matrix.rows) > 0:
         dmat = digital.matrix
@@ -193,7 +195,7 @@ if kb_json.digital is not None:
             "DIGITAL_MATRIX_COL2ROW", 1 if dmat.diode_direction == "col2row" else 0
         )
         for row in dmat.matrix:
-            digital_key_map.extend(row)
+            digital_key_map.extend(0 if k is None else k + 1 for k in row)
 
     if len(digital_key_map) > 0:
         build_flags.define("DIGITAL_ENABLE")
@@ -202,13 +204,19 @@ if kb_json.digital is not None:
         build_flags.define("DIGITAL_DEBOUNCE_MS", debounce_ms)
 
 # Calibration Configuration (merge board overrides with switch file defaults)
-cal_dict = kb_json.calibration.model_dump()
-if cal_dict["initial_bottom_out_threshold"] is None:
-    cal_dict["initial_bottom_out_threshold"] = sw_json.initial_bottom_out_threshold
-switch_travel_mm = cal_dict.pop("switch_travel") or sw_json.travel_mm
+switch_travel_mm = kb_json.hall.travel_mm or sw_json.travel_mm
 travel_val = int(round(switch_travel_mm * 10))
-assert kb_json.keyboard.num_keys is not None
-cal_dict["switch_travel"] = [travel_val] * kb_json.keyboard.num_keys
+bottom_out_threshold = (
+    kb_json.hall.bottom_out_threshold
+    if kb_json.hall.bottom_out_threshold is not None
+    else sw_json.initial_bottom_out_threshold
+)
+assert kb_json.num_keys is not None
+cal_dict = {
+    "initial_rest_value": kb_json.hall.rest_adc,
+    "initial_bottom_out_threshold": bottom_out_threshold,
+    "switch_travel": [travel_val] * kb_json.num_keys,
+}
 build_flags.define("DEFAULT_CALIBRATION", utils.to_c_struct(cal_dict))
 
 # Tuning Configuration
@@ -248,12 +256,11 @@ build_flags.define("WL_BASE_ADDRESS", wl_base_address)
 build_flags.linker_defsym("WL_BASE_ADDRESS", wl_base_address)
 
 # Keyboard Configuration
-kb = kb_json.keyboard
-assert kb.num_layers is not None and kb.num_keys is not None and kb.num_advanced_keys is not None
-build_flags.define("NUM_PROFILES", kb.num_profiles)
-build_flags.define("NUM_LAYERS", kb.num_layers)
-build_flags.define("NUM_KEYS", kb.num_keys)
-build_flags.define("NUM_ADVANCED_KEYS", kb.num_advanced_keys)
+assert kb_json.num_layers is not None and kb_json.num_keys is not None and kb_json.num_advanced_keys is not None
+build_flags.define("NUM_PROFILES", kb_json.num_profiles)
+build_flags.define("NUM_LAYERS", kb_json.num_layers)
+build_flags.define("NUM_KEYS", kb_json.num_keys)
+build_flags.define("NUM_ADVANCED_KEYS", kb_json.num_advanced_keys)
 
 # Default Keymaps (per profile)
 default_keymaps = utils.resolve_default_keymaps(kb_json)
@@ -264,13 +271,6 @@ if kb_json.actuation is not None:
     act = kb_json.actuation
     if act.actuation_point_um is not None:
         build_flags.define("DEFAULT_ACTUATION_POINT", act.actuation_point_um)
-    elif act.actuation_point is not None:
-        ap = (
-            act.actuation_point
-            if act.actuation_point > 255
-            else int(round(act.actuation_point * (switch_travel_mm * 1000.0) / 255.0))
-        )
-        build_flags.define("DEFAULT_ACTUATION_POINT", ap)
     if act.rt_sensitivity_um is not None:
         build_flags.define("DEFAULT_RT_SENSITIVITY", act.rt_sensitivity_um)
     if act.rt_deadzone_um is not None:

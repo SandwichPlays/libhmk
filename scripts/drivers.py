@@ -21,7 +21,7 @@ from typing import Callable
 class PlatformIO:
     # PlatformIO board identifier
     board: str
-    # Linker script used for the board
+    # Linker script path relative to project root
     ldscript: str
     # PlatformIO framework identifier
     framework: str
@@ -63,7 +63,6 @@ class Flash:
     # Value of an empty word in the flash
     empty_value: int
 
-    # Get the number of flash sectors
     def get_num_sectors(self):
         match self.sector_sizes:
             case NonUniformSectors(sizes):
@@ -71,7 +70,6 @@ class Flash:
             case UniformSectors(_, num_sectors):
                 return num_sectors
 
-    # Get the total size of the flash
     def get_flash_size(self):
         match self.sector_sizes:
             case NonUniformSectors(sizes):
@@ -79,7 +77,6 @@ class Flash:
             case UniformSectors(size, num_sectors):
                 return size * num_sectors
 
-    # Get the size of a flash sector
     def get_sector_size(self, sector: int):
         match self.sector_sizes:
             case NonUniformSectors(sizes):
@@ -89,7 +86,6 @@ class Flash:
                 assert sector < num_sectors
                 return size
 
-    # Round up the required size to the minimum number of flash sectors (from the end)
     def round_up_to_flash_sectors(self, required_size: int):
         assert required_size <= self.get_flash_size()
         total = 0
@@ -102,20 +98,14 @@ class Flash:
 
 @dataclass
 class ADC:
-    # Maximum ADC resolution supported by the MCU
     max_resolution: int
-    # ADC input pin names, in the same order as the ADC channels
     input_pins: list[str]
-    # Convert a list of GPIO pin names to a tuple of (GPIO port names, GPIO pin numbers)
     to_gpio_array: Callable[[list[str]], tuple[list[str], list[str]]]
-    # Supported hardware oversampling ratios: ratio -> (ratio_macro, shift_macro) or None for 1x
     oversample_map: dict[int, tuple[str, str] | None] = field(
         default_factory=lambda: {1: None}
     )
-    # Supported ADC sample cycle values: cycles -> SDK macro
     sample_cycles_map: dict[float, str] = field(default_factory=dict)
 
-    # Convert a list of ADC input channels or GPIO pin names to a list of ADC input channels
     def to_adc_inputs(self, channels_or_pins: list[str | int]):
         channels: list[int] = []
         for x in channels_or_pins:
@@ -134,7 +124,6 @@ class ADC:
                     channels.append(x)
         return channels
 
-    # Convert a single GPIO pin name to a tuple of (GPIO port name, GPIO pin number)
     def to_gpio(self, pin: str):
         ports, pin_nums = self.to_gpio_array([pin])
         return ports[0], pin_nums[0]
@@ -146,7 +135,6 @@ class Metadata:
     flash: Flash
     adc: ADC
     valid_ports: list[str] = field(default_factory=lambda: ["A", "B", "C", "D", "F"])
-    # Maps (pin_ch1, pin_ch2) -> (timer_peripheral, mux_ch1, mux_ch2)
     encoder_timers: dict[tuple[str, str], tuple[str, str, str]] = field(
         default_factory=dict
     )
@@ -172,7 +160,6 @@ class Metadata:
                         return (tmr, mux_1, mux_2)
                     else:
                         return (tmr, mux_2, mux_1)
-        # Fallback to Polled GPIO Quadrature on any arbitrary GPIO pins
         return ("NULL", "0", "0")
 
 
@@ -180,8 +167,8 @@ class Metadata:
 class Driver:
     tinyusb: TinyUSB
     metadata: Metadata
-    platformio: PlatformIO | None = None  # None for CMake-only targets (e.g. HPM)
-    hardware_dir: str | None = None
+    mcu_dir: str
+    platformio: PlatformIO | None = None
 
 
 _AT32F405_OVERSAMPLE_MAP: dict[int, tuple[str, str] | None] = {
@@ -257,9 +244,10 @@ _STM32G431_SAMPLE_CYCLES_MAP: dict[float, str] = {
 
 
 STM32F446XX = Driver(
+    mcu_dir="mcu/stm32f446",
     platformio=PlatformIO(
         board="genericSTM32F446RE",
-        ldscript="stm32f446retx.ld",
+        ldscript="mcu/stm32f446/ld/stm32f446retx.ld",
         framework="stm32cube",
         platform="ststm32",
     ),
@@ -287,22 +275,9 @@ STM32F446XX = Driver(
         adc=ADC(
             max_resolution=12,
             input_pins=[
-                "A0",
-                "A1",
-                "A2",
-                "A3",
-                "A4",
-                "A5",
-                "A6",
-                "A7",
-                "B0",
-                "B1",
-                "C0",
-                "C1",
-                "C2",
-                "C3",
-                "C4",
-                "C5",
+                "A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7",
+                "B0", "B1",
+                "C0", "C1", "C2", "C3", "C4", "C5",
             ],
             to_gpio_array=lambda pins: (
                 [f"GPIO{pin[0]}" for pin in pins],
@@ -314,13 +289,13 @@ STM32F446XX = Driver(
         valid_ports=["A", "B", "C", "D", "H"],
         mux_timer="TIM3",
     ),
-    hardware_dir="stm32f446xx",
 )
 
 AT32F405XX = Driver(
+    mcu_dir="mcu/at32f405",
     platformio=PlatformIO(
         board="genericAT32F405RCT7",
-        ldscript="at32f405xc.ld",
+        ldscript="mcu/at32f405/ld/at32f405xc.ld",
         framework="at32firmlib",
         platform="https://github.com/ArteryTek/platform-arterytekat32.git",
     ),
@@ -340,22 +315,9 @@ AT32F405XX = Driver(
         adc=ADC(
             max_resolution=12,
             input_pins=[
-                "A0",
-                "A1",
-                "A2",
-                "A3",
-                "A4",
-                "A5",
-                "A6",
-                "A7",
-                "B0",
-                "B1",
-                "C0",
-                "C1",
-                "C2",
-                "C3",
-                "C4",
-                "C5",
+                "A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7",
+                "B0", "B1",
+                "C0", "C1", "C2", "C3", "C4", "C5",
             ],
             to_gpio_array=lambda pins: (
                 [f"GPIO{pin[0]}" for pin in pins],
@@ -368,13 +330,13 @@ AT32F405XX = Driver(
         encoder_timers=_AT32F405_ENCODER_TIMERS,
         mux_timer="TMR6",
     ),
-    hardware_dir="at32f405xx",
 )
 
 AT32F405XB = Driver(
+    mcu_dir="mcu/at32f405",
     platformio=PlatformIO(
         board="genericAT32F405RBT7-7",
-        ldscript="at32f405xb.ld",
+        ldscript="mcu/at32f405/ld/at32f405xb.ld",
         framework="at32firmlib",
         platform="https://github.com/ArteryTek/platform-arterytekat32.git",
     ),
@@ -394,22 +356,9 @@ AT32F405XB = Driver(
         adc=ADC(
             max_resolution=12,
             input_pins=[
-                "A0",
-                "A1",
-                "A2",
-                "A3",
-                "A4",
-                "A5",
-                "A6",
-                "A7",
-                "B0",
-                "B1",
-                "C0",
-                "C1",
-                "C2",
-                "C3",
-                "C4",
-                "C5",
+                "A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7",
+                "B0", "B1",
+                "C0", "C1", "C2", "C3", "C4", "C5",
             ],
             to_gpio_array=lambda pins: (
                 [f"GPIO{pin[0]}" for pin in pins],
@@ -422,13 +371,13 @@ AT32F405XB = Driver(
         encoder_timers=_AT32F405_ENCODER_TIMERS,
         mux_timer="TMR6",
     ),
-    hardware_dir="at32f405xx",
 )
 
 STM32G431XX = Driver(
+    mcu_dir="mcu/stm32g431",
     platformio=PlatformIO(
         board="genericSTM32G431CB",
-        ldscript="stm32g431cbtx.ld",
+        ldscript="mcu/stm32g431/ld/stm32g431cbtx.ld",
         framework="stm32cube",
         platform="ststm32",
     ),
@@ -448,25 +397,10 @@ STM32G431XX = Driver(
         adc=ADC(
             max_resolution=12,
             input_pins=[
-                "A0",
-                "A1",
-                "A2",
-                "A3",
-                "A4",
-                "A5",
-                "A6",
-                "A7",
-                "B0",
-                "B1",
-                "B2",
-                "B11",
-                "B12",
-                "B14",
-                "C13",
-                "C14",
-                "C15",
-                "F0",
-                "F1",
+                "A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7",
+                "B0", "B1", "B2", "B11", "B12", "B14",
+                "C13", "C14", "C15",
+                "F0", "F1",
             ],
             to_gpio_array=lambda pins: (
                 [f"GPIO{pin[0]}" for pin in pins],
@@ -478,10 +412,10 @@ STM32G431XX = Driver(
         valid_ports=["A", "B", "C", "F", "G"],
         mux_timer="TIM4",
     ),
-    hardware_dir="stm32g431xx",
 )
 
 HPM5300XX = Driver(
+    mcu_dir="mcu/hpm5300",
     tinyusb=TinyUSB(mcu="hpm5300"),
     metadata=Metadata(
         bootloader=Bootloader(
@@ -498,10 +432,10 @@ HPM5300XX = Driver(
         adc=ADC(
             max_resolution=16,
             input_pins=[
-                "A0", "A1", "A2",  "A3",  "A4",  "A5",  "A6",  "A7",
-                "B0", "B1", "B2",  "B3",  "B4",  "B5",  "B6",  "B7",
-                "C0", "C1", "C2",  "C3",  "C4",  "C5",  "C6",  "C7",
-                "D0", "D1", "D2",  "D3",  "D4",  "D5",  "D6",  "D7",
+                "A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7",
+                "B0", "B1", "B2", "B3", "B4", "B5", "B6", "B7",
+                "C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7",
+                "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7",
             ],
             to_gpio_array=lambda pins: (
                 [f"GPIO_DI_GPIO{pin[0]}" for pin in pins],
@@ -512,22 +446,29 @@ HPM5300XX = Driver(
         valid_ports=["A", "B", "C", "D"],
     ),
     platformio=None,
-    hardware_dir="hpm5300xx",
 )
 
-# Declarative registry mapping family names and specific chip part numbers to Driver instances
 DRIVERS: dict[str, Driver] = {
     "stm32f446xx": STM32F446XX,
+    "stm32f446re": STM32F446XX,
+    "stm32f446rc": STM32F446XX,
     "stm32f446ret6": STM32F446XX,
     "at32f405xx": AT32F405XX,
+    "at32f405rc": AT32F405XX,
+    "at32f405cc": AT32F405XX,
+    "at32f405kc": AT32F405XX,
     "at32f405rct7": AT32F405XX,
     "at32f405cct7": AT32F405XX,
     "at32f405kcu7": AT32F405XX,
     "at32f405xb": AT32F405XB,
+    "at32f405rb": AT32F405XB,
+    "at32f405cb": AT32F405XB,
+    "at32f405kb": AT32F405XB,
     "at32f405rbt7": AT32F405XB,
     "at32f405cbt7": AT32F405XB,
     "at32f405kbu7": AT32F405XB,
     "stm32g431xx": STM32G431XX,
+    "stm32g431cb": STM32G431XX,
     "stm32g431cbt6": STM32G431XX,
     "stm32g431cbu6": STM32G431XX,
     "hpm5300xx": HPM5300XX,

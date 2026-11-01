@@ -6,12 +6,8 @@
 #        set HPM_SDK_BASE=C:\path\to\hpm_sdk
 #   3. Set BOARD to the target board name in the HPM SDK:
 #        cmake -DBOARD=hpm5300evklite -DKEYBOARD=sandowo_plus -B build
-#      (or whatever HPM5361 board definition is appropriate)
 #   4. Build:
 #        cmake --build build
-#
-# To add support for a new keyboard, create keyboards/<name>/keyboard.json
-# following the existing examples, set KEYBOARD=<name> in the CMake command.
 
 cmake_minimum_required(VERSION 3.13)
 
@@ -40,27 +36,39 @@ include("${BOARD_CONFIG_CMAKE}")
 
 # --- Source Files ---
 sdk_app_src(
-    src/main.c
-    src/layout.c
-    src/matrix.c
-    src/migration.c
-    src/usb_descriptors.c
-    src/wear_leveling.c
-    src/commands.c
-    src/encoder.c
+    core/main.c
+    core/matrix/matrix.c
+    core/matrix/distance.c
+    core/matrix/scan_rate.c
+    core/keymap/layout.c
+    core/keymap/keycodes.c
+    core/keymap/advanced_keys.c
+    core/keymap/deferred_actions.c
+    core/keymap/hooks.c
+    core/storage/eeconfig.c
+    core/storage/wear_leveling.c
+    core/storage/migration.c
+    core/storage/crc32.c
+    core/storage/flash.c
+    core/usb/usb_descriptors.c
+    core/usb/hid.c
+    core/usb/xinput.c
+    core/usb/commands.c
+    core/drivers/encoder.c
+    core/drivers/rgb.c
 
-    # HPM5300 hardware abstraction layer
-    ${BOARD_DRIVER_DIR}/analog.c
-    ${BOARD_DRIVER_DIR}/board.c
-    ${BOARD_DRIVER_DIR}/crc32.c
-    ${BOARD_DRIVER_DIR}/flash.c
-    ${BOARD_DRIVER_DIR}/timer.c
+    # MCU hardware abstraction layer
+    ${BOARD_DRIVER_DIR}/src/analog.c
+    ${BOARD_DRIVER_DIR}/src/board.c
+    ${BOARD_DRIVER_DIR}/src/crc32.c
+    ${BOARD_DRIVER_DIR}/src/flash.c
+    ${BOARD_DRIVER_DIR}/src/timer.c
 )
 
 # --- Include Paths ---
 sdk_inc(
-    include
-    ${BOARD_DRIVER_DIR}
+    core/include
+    ${BOARD_DRIVER_DIR}/include
     ${BOARD_KEYBOARD_DIR}
 )
 
@@ -82,11 +90,5 @@ sdk_link_libraries(
     hpm_sdk::l1c
     hpm_sdk::romapi
 )
-
-# --- TinyUSB ---
-# TinyUSB is included via HPM SDK dependency or added as a subdirectory
-# If not bundled with HPM SDK, add it:
-# add_subdirectory(lib/tinyusb)
-# sdk_link_libraries(tinyusb_device)
 
 generate_ide_projects()

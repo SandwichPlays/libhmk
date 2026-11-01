@@ -37,6 +37,7 @@ Import("env")
 keyboard = env["PIOENV"]
 
 kb_json = utils.get_kb_json(keyboard)
+sw_json = utils.get_switch_json(kb_json.switch)
 driver = utils.get_driver(keyboard)
 
 
@@ -49,20 +50,42 @@ def ms_os_20_guid_def():
 
 
 def keyboard_metadata_def():
+    switch_travel_mm = kb_json.hall.travel_mm or sw_json.travel_mm
+
+    layout_dict: dict = {
+        "keymap": [
+            [k.model_dump(exclude_none=True) for k in row]
+            for row in kb_json.layout.keys
+        ],
+    }
+    if kb_json.layout.labels is not None:
+        layout_dict["labels"] = kb_json.layout.labels
+    if kb_json.encoders is not None:
+        layout_dict["encoders"] = [
+            {
+                "keys": list(e.keys),
+                **({"buttonKey": e.button_key} if e.button_key is not None else {}),
+                "x": e.x,
+                "y": e.y,
+                "w": e.w,
+                "h": e.h,
+            }
+            for e in kb_json.encoders
+        ]
+
     metadata = {
         "name": kb_json.name,
         "vendorId": kb_json.usb.vid,
         "productId": kb_json.usb.pid,
         "usbHighSpeed": kb_json.usb.port == KeyboardUSBPort.HIGH_SPEED,
         "adcResolution": utils.get_adc_resolution(kb_json, driver),
-        "switchTravel": kb_json.calibration.switch_travel,
-        "numProfiles": kb_json.keyboard.num_profiles,
-        "numLayers": kb_json.keyboard.num_layers,
-        "numKeys": kb_json.keyboard.num_keys,
-        "numAdvancedKeys": kb_json.keyboard.num_advanced_keys,
-        "layout": kb_json.layout.model_dump(exclude_none=True),
-        "encoders": kb_json.layout.encoders
-                    and [e.model_dump(exclude_none=True) for e in kb_json.layout.encoders],
+        "switchTravel": switch_travel_mm,
+        "numProfiles": kb_json.num_profiles,
+        "numLayers": kb_json.num_layers,
+        "numKeys": kb_json.num_keys,
+        "numAdvancedKeys": kb_json.num_advanced_keys,
+        "layout": layout_dict,
+        "encoders": layout_dict.get("encoders"),
         "defaultKeymaps": utils.resolve_default_keymaps(kb_json),
     }
 
@@ -74,7 +97,7 @@ def keyboard_metadata_def():
     return utils.to_slice_def("KEYBOARD_METADATA", compressed)
 
 
-with open(os.path.join("include", "metadata.h"), "w") as f:
+with open(os.path.join("core", "include", "metadata.h"), "w") as f:
     f.write(
         METADATA_TEMPLATE.format(
             ms_os_20_guid=ms_os_20_guid_def(),

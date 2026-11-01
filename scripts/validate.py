@@ -19,9 +19,9 @@ def validate_keyboard(keyboard: str):
     kb_json = utils.get_kb_json(keyboard)
     sw_json = utils.get_switch_json(kb_json.switch)
 
-    num_keys = kb_json.keyboard.num_keys
-    num_layers = kb_json.keyboard.num_layers
-    num_profiles = kb_json.keyboard.num_profiles
+    num_keys = kb_json.num_keys
+    num_layers = kb_json.num_layers
+    num_profiles = kb_json.num_profiles
     assert num_keys is not None and num_layers is not None
 
     # 1. Validate Switch LUT
@@ -35,16 +35,16 @@ def validate_keyboard(keyboard: str):
         )
 
     # 2. Validate ADC oversample & sample_cycles
-    if kb_json.analog.oversample is not None:
-        if kb_json.analog.oversample not in driver.metadata.adc.oversample_map:
+    if kb_json.hall.oversample is not None:
+        if kb_json.hall.oversample not in driver.metadata.adc.oversample_map:
             raise ValueError(
-                f"[{keyboard}] Unsupported analog.oversample={kb_json.analog.oversample} for driver '{kb_json.hardware.driver}'. "
+                f"[{keyboard}] Unsupported hall.oversample={kb_json.hall.oversample} for MCU '{kb_json.mcu}'. "
                 f"Supported: {list(driver.metadata.adc.oversample_map.keys())}"
             )
-    if kb_json.analog.sample_cycles is not None:
-        if kb_json.analog.sample_cycles not in driver.metadata.adc.sample_cycles_map:
+    if kb_json.hall.sample_cycles is not None:
+        if kb_json.hall.sample_cycles not in driver.metadata.adc.sample_cycles_map:
             raise ValueError(
-                f"[{keyboard}] Unsupported analog.sample_cycles={kb_json.analog.sample_cycles} for driver '{kb_json.hardware.driver}'. "
+                f"[{keyboard}] Unsupported hall.sample_cycles={kb_json.hall.sample_cycles} for MCU '{kb_json.mcu}'. "
                 f"Supported: {list(driver.metadata.adc.sample_cycles_map.keys())}"
             )
 
@@ -54,11 +54,11 @@ def validate_keyboard(keyboard: str):
     def claim_pin(pin: str, owner: str, require_adc: bool = False):
         if not driver.metadata.is_valid_gpio_pin(pin):
             raise ValueError(
-                f"[{keyboard}] Invalid GPIO pin '{pin}' in {owner} for driver '{kb_json.hardware.driver}'"
+                f"[{keyboard}] Invalid GPIO pin '{pin}' in {owner} for MCU '{kb_json.mcu}'"
             )
         if require_adc and pin not in driver.metadata.adc.input_pins:
             raise ValueError(
-                f"[{keyboard}] Pin '{pin}' in {owner} is not an ADC-capable pin on '{kb_json.hardware.driver}'. "
+                f"[{keyboard}] Pin '{pin}' in {owner} is not an ADC-capable pin on '{kb_json.mcu}'. "
                 f"Valid ADC pins: {driver.metadata.adc.input_pins}"
             )
         if pin in used_pins:
@@ -67,54 +67,46 @@ def validate_keyboard(keyboard: str):
             )
         used_pins[pin] = owner
 
-    def check_key_index(k: int, owner: str, allow_zero: bool = True):
-        low = 0 if allow_zero else 1
-        if k < low or k > num_keys:
+    def check_key_index(k: int | None, owner: str):
+        if k is None:
+            return
+        if k < 0 or k >= num_keys:
             raise ValueError(
-                f"[{keyboard}] Key index {k} in {owner} is out of range ({low}..{num_keys})"
+                f"[{keyboard}] 0-indexed key {k} in {owner} is out of range (0..{num_keys - 1})"
             )
 
-    # Analog Raw
-    if kb_json.analog.raw is not None:
-        raw = kb_json.analog.raw
-        if raw.vector is None or len(raw.input) != len(raw.vector):
+    # Hall Direct ADC Pins
+    if kb_json.hall.pins is not None:
+        pins = kb_json.hall.pins
+        keys = kb_json.hall.keys
+        if keys is None or len(pins) != len(keys):
             raise ValueError(
-                f"[{keyboard}] analog.raw.input length ({len(raw.input)}) must match analog.raw.vector length"
+                f"[{keyboard}] hall.pins length ({len(pins)}) must match hall.keys length"
             )
-        for ch_or_pin in raw.input:
-            pin = (
-                ch_or_pin
-                if isinstance(ch_or_pin, str)
-                else driver.metadata.adc.input_pins[ch_or_pin]
-            )
-            claim_pin(pin, "analog.raw.input", require_adc=True)
-        for k in raw.vector:
-            check_key_index(k, "analog.raw.vector")
+        for pin in pins:
+            claim_pin(pin, "hall.pins", require_adc=True)
+        for k in keys:
+            check_key_index(k, "hall.keys")
 
-    # Analog Mux
-    if kb_json.analog.mux is not None:
-        mux = kb_json.analog.mux
+    # Hall Analog Multiplexer
+    if kb_json.hall.mux is not None:
+        mux = kb_json.hall.mux
         for pin in mux.select:
-            claim_pin(pin, "analog.mux.select")
-        for ch_or_pin in mux.input:
-            pin = (
-                ch_or_pin
-                if isinstance(ch_or_pin, str)
-                else driver.metadata.adc.input_pins[ch_or_pin]
-            )
-            claim_pin(pin, "analog.mux.input", require_adc=True)
+            claim_pin(pin, "hall.mux.select")
+        for pin in mux.pins:
+            claim_pin(pin, "hall.mux.pins", require_adc=True)
         expected_mux_channels = 1 << len(mux.select)
-        if len(mux.matrix) != len(mux.input):
+        if len(mux.matrix) != len(mux.pins):
             raise ValueError(
-                f"[{keyboard}] analog.mux.matrix must have {len(mux.input)} rows (one per mux input)"
+                f"[{keyboard}] hall.mux.matrix must have {len(mux.pins)} rows (one per mux ADC pin)"
             )
         for row in mux.matrix:
             if len(row) != expected_mux_channels:
                 raise ValueError(
-                    f"[{keyboard}] Each row in analog.mux.matrix must have {expected_mux_channels} entries (2^{len(mux.select)})"
+                    f"[{keyboard}] Each row in hall.mux.matrix must have {expected_mux_channels} entries (2^{len(mux.select)})"
                 )
             for k in row:
-                check_key_index(k, "analog.mux.matrix")
+                check_key_index(k, "hall.mux.matrix")
 
     # Digital Keys
     if kb_json.digital is not None:
@@ -127,7 +119,7 @@ def validate_keyboard(keyboard: str):
             for pin in direct.pins:
                 claim_pin(pin, "digital.direct.pins")
             for k in direct.keys:
-                check_key_index(k, "digital.direct.keys", allow_zero=False)
+                check_key_index(k, "digital.direct.keys")
         if kb_json.digital.matrix is not None:
             dmat = kb_json.digital.matrix
             for pin in dmat.rows:
@@ -148,8 +140,8 @@ def validate_keyboard(keyboard: str):
 
     # Encoders & Timers
     used_timers: dict[str, str] = {}
-    if kb_json.analog.mux is not None and driver.metadata.mux_timer:
-        used_timers[driver.metadata.mux_timer] = "analog.mux settle timer"
+    if kb_json.hall.mux is not None and driver.metadata.mux_timer:
+        used_timers[driver.metadata.mux_timer] = "hall.mux settle timer"
 
     if kb_json.encoders is not None:
         for idx, enc in enumerate(kb_json.encoders):
@@ -157,20 +149,14 @@ def validate_keyboard(keyboard: str):
             for pin in enc.pins:
                 claim_pin(pin, f"{owner}.pins")
             for k in enc.keys:
-                if k < 0 or k >= num_keys:
-                    raise ValueError(
-                        f"[{keyboard}] Encoder key index {k} in {owner}.keys is out of range (0..{num_keys - 1})"
-                    )
+                check_key_index(k, f"{owner}.keys")
             if enc.button_pin is not None:
                 claim_pin(enc.button_pin, f"{owner}.button_pin")
                 if enc.button_key is None:
                     raise ValueError(
                         f"[{keyboard}] {owner} specifies button_pin='{enc.button_pin}' without button_key"
                     )
-                if enc.button_key < 0 or enc.button_key >= num_keys:
-                    raise ValueError(
-                        f"[{keyboard}] Encoder button_key {enc.button_key} in {owner}.button_key is out of range (0..{num_keys - 1})"
-                    )
+                check_key_index(enc.button_key, f"{owner}.button_key")
             tmr, _, _ = driver.metadata.resolve_encoder_timer(
                 enc.pins[0], enc.pins[1], enc.timer
             )

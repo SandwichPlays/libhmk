@@ -11,7 +11,6 @@
 # You should have received a copy of the GNU General Public License along with
 # this program. If not, see <https://www.gnu.org/licenses/>.
 
-import math
 import os
 from drivers import *
 from schema.keyboard import Keyboard, SwitchDefinition
@@ -61,13 +60,13 @@ def get_switch_json(switch_id: str) -> SwitchDefinition:
         return SwitchDefinition.model_validate_json(f.read())
 
 
-# Load the driver based on the keyboard configuration
+# Load the driver based on the keyboard MCU
 def get_driver(keyboard: str) -> Driver:
     kb_json = get_kb_json(keyboard)
-    driver_key = kb_json.hardware.driver.lower()
+    driver_key = kb_json.mcu.lower()
     if driver_key not in DRIVERS:
         raise ValueError(
-            f"Unsupported driver '{kb_json.hardware.driver}'. Supported drivers/MCUs: {list(DRIVERS.keys())}"
+            f"Unsupported MCU '{kb_json.mcu}'. Supported MCUs: {list(DRIVERS.keys())}"
         )
     return DRIVERS[driver_key]
 
@@ -93,7 +92,7 @@ def to_slice_def(name: str, arr: list | bytes):
 
 # Get the ADC resolution, or default to the maximum resolution supported by the MCU
 def get_adc_resolution(kb_json: Keyboard, driver: Driver):
-    return kb_json.analog.adc_resolution or driver.metadata.adc.max_resolution
+    return kb_json.hall.adc_resolution or driver.metadata.adc.max_resolution
 
 
 # Pad a keymap with KC_TRNS layers if fewer than num_layers are specified
@@ -106,8 +105,8 @@ def _pad_keymap_layers(keymap: list[list[str]], num_layers: int, num_keys: int) 
 
 # Resolve per-profile default keymaps
 def resolve_default_keymaps(kb_json: Keyboard) -> list[list[list[str]]]:
-    num_layers = kb_json.keyboard.num_layers
-    num_keys = kb_json.keyboard.num_keys
+    num_layers = kb_json.num_layers
+    num_keys = kb_json.num_keys
     assert num_layers is not None and num_keys is not None
 
     if kb_json.keymaps is not None:
@@ -120,30 +119,30 @@ def resolve_default_keymaps(kb_json: Keyboard) -> list[list[list[str]]]:
                 "Default keymap must be specified when no per-profile default keymaps are specified"
             )
         padded = _pad_keymap_layers(kb_json.keymap, num_layers, num_keys)
-        return [padded] * kb_json.keyboard.num_profiles
+        return [padded] * kb_json.num_profiles
 
 
-# Compute the set of 1-indexed keys that are connected to Hall-effect analog sensors
+# Compute the set of 0-indexed keys that are connected to Hall-effect analog sensors
 def get_analog_key_set(kb_json: Keyboard) -> set[int]:
     analog_keys: set[int] = set()
-    if kb_json.analog.raw is not None and kb_json.analog.raw.vector is not None:
-        for k in kb_json.analog.raw.vector:
-            if k > 0:
+    if kb_json.hall.pins is not None and kb_json.hall.keys is not None:
+        for k in kb_json.hall.keys:
+            if k is not None:
                 analog_keys.add(k)
-    if kb_json.analog.mux is not None:
-        for row in kb_json.analog.mux.matrix:
+    if kb_json.hall.mux is not None:
+        for row in kb_json.hall.mux.matrix:
             for k in row:
-                if k > 0:
+                if k is not None:
                     analog_keys.add(k)
     return analog_keys
 
 
 # Estimate minimum wear-leveling virtual storage size in bytes for eeconfig_t
 def compute_min_wl_virtual_size(kb_json: Keyboard) -> int:
-    num_keys = kb_json.keyboard.num_keys or 1
-    num_layers = kb_json.keyboard.num_layers or 4
-    num_profiles = kb_json.keyboard.num_profiles or 4
-    num_adv = kb_json.keyboard.num_advanced_keys or 1
+    num_keys = kb_json.num_keys or 1
+    num_layers = kb_json.num_layers or 4
+    num_profiles = kb_json.num_profiles or 4
+    num_adv = kb_json.num_advanced_keys or 1
 
     # Header + calibration + bottom_out_threshold + distance_lut(2048) + per-profile
     global_bytes = 32 + (4 + num_keys) + (2 * num_keys) + 2048

@@ -37,9 +37,9 @@ def create_env_section(keyboard: str) -> dict[str, str] | None:
 
     return {
         "board": driver.platformio.board,
-        "board_build.ldscript": f"linker/{driver.platformio.ldscript}",
+        "board_build.ldscript": driver.platformio.ldscript,
         "build_flags": "\n".join(build_flags),
-        "build_src_filter": "${env.build_src_filter}",
+        "build_src_filter": "-<*> +<core/>",
         "build_src_flags": "\n".join(build_src_flags),
         "extra_scripts": "\n".join(extra_scripts),
         "framework": driver.platformio.framework,
@@ -77,6 +77,10 @@ if __name__ == "__main__":
 
     if not args.check:
         pio_config = configparser.ConfigParser()
+        pio_config["platformio"] = {
+            "src_dir": ".",
+            "include_dir": "core/include",
+        }
         for kb in target_keyboards:
             sec = create_env_section(kb)
             if sec is not None:
@@ -84,4 +88,4 @@ if __name__ == "__main__":
 
         with open("platformio.ini", "w") as f:
             pio_config.write(f)
-        print(f"Generated platformio.ini with {len(pio_config.sections())} environment(s).")
+        print(f"Generated platformio.ini with {len(pio_config.sections()) - 1} environment(s).")
