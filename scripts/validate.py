@@ -169,12 +169,34 @@ def validate_keyboard(keyboard: str):
 
     # RGB
     if kb_json.rgb is not None:
-        claim_pin(kb_json.rgb.pin, "rgb.pin")
-        if kb_json.rgb.timer in used_timers:
+        rgb = kb_json.rgb
+        claim_pin(rgb.pin, "rgb.pin")
+        resolved = driver.metadata.resolve_rgb_timer(
+            rgb.pin, rgb.timer, rgb.channel, used_timers
+        )
+        if resolved is None:
+            valid_rgb_pins = list(driver.metadata.rgb_timers.keys())
             raise ValueError(
-                f"[{keyboard}] Timer '{kb_json.rgb.timer}' conflict between '{used_timers[kb_json.rgb.timer]}' and 'rgb'"
+                f"[{keyboard}] Pin '{rgb.pin}' cannot drive hardware PWM RGB on '{kb_json.mcu}' "
+                f"(timer={rgb.timer}, channel={rgb.channel}). Valid RGB pins: {valid_rgb_pins}"
             )
-        used_timers[kb_json.rgb.timer] = "rgb"
+        rgb_tmr, _, _ = resolved
+        if rgb_tmr in used_timers:
+            raise ValueError(
+                f"[{keyboard}] Timer '{rgb_tmr}' conflict between '{used_timers[rgb_tmr]}' and 'rgb'"
+            )
+        used_timers[rgb_tmr] = "rgb"
+        if rgb.key_map is not None:
+            if len(rgb.key_map) != rgb.num_leds:
+                raise ValueError(
+                    f"[{keyboard}] rgb.key_map length ({len(rgb.key_map)}) must match rgb.num_leds ({rgb.num_leds})"
+                )
+            for k in rgb.key_map:
+                check_key_index(k, "rgb.key_map")
+        if rgb.led_positions is not None and len(rgb.led_positions) != rgb.num_leds:
+            raise ValueError(
+                f"[{keyboard}] rgb.led_positions length ({len(rgb.led_positions)}) must match rgb.num_leds ({rgb.num_leds})"
+            )
 
     # 4. Validate Default Keymaps
     default_keymaps = utils.resolve_default_keymaps(kb_json)

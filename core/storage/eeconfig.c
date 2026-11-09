@@ -28,6 +28,7 @@ static const uint8_t
 static eeconfig_profile_t default_profile = {
     .gamepad_options = DEFAULT_GAMEPAD_OPTIONS,
     .tick_rate = DEFAULT_TICK_RATE,
+    .rgb_options = DEFAULT_RGB_OPTIONS,
 };
 
 static bool eeconfig_write_default_profile(uint8_t profile) {
@@ -51,6 +52,9 @@ void eeconfig_init(void) {
     default_profile.actuation_map[i].actuation_point = DEFAULT_ACTUATION_POINT;
     default_profile.actuation_map[i].rt_deadzone_top = DEFAULT_RT_DEADZONE;
     default_profile.actuation_map[i].rt_deadzone_bottom = DEFAULT_RT_DEADZONE;
+  }
+  for (uint32_t i = 0; i < RGB_STORAGE_LEDS; i++) {
+    default_profile.rgb_colors[i] = (rgb_color_t){.r = 0, .g = 180, .b = 255};
   }
 
   eeconfig = (const eeconfig_t *)wl_cache;

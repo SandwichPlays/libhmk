@@ -137,12 +137,101 @@ def get_analog_key_set(kb_json: Keyboard) -> set[int]:
     return analog_keys
 
 
+# Resolve per-LED 0-indexed key mapping (None for underglow/unmapped LEDs)
+def resolve_rgb_key_map(kb_json: Keyboard) -> list[int | None]:
+    if kb_json.rgb is None:
+        return []
+    if kb_json.rgb.key_map is not None:
+        return list(kb_json.rgb.key_map)
+
+    ordered_keys: list[int] = []
+    seen: set[int] = set()
+    for row in kb_json.layout.keys:
+        for k in row:
+            if k.option is not None and k.option[1] != 0:
+                continue
+            if k.key not in seen:
+                seen.add(k.key)
+                ordered_keys.append(k.key)
+    if kb_json.encoders is not None:
+        for enc in kb_json.encoders:
+            if enc.button_key is not None and enc.button_key not in seen:
+                seen.add(enc.button_key)
+                ordered_keys.append(enc.button_key)
+
+    return [
+        ordered_keys[i] if i < len(ordered_keys) else None
+        for i in range(kb_json.rgb.num_leds)
+    ]
+
+
+# Resolve normalized (0..255, 0..255) physical coordinates for each RGB LED
+def resolve_rgb_led_positions(kb_json: Keyboard) -> list[tuple[int, int]]:
+    if kb_json.rgb is None:
+        return []
+
+    num_leds = kb_json.rgb.num_leds
+    key_map = resolve_rgb_key_map(kb_json)
+
+    key_centers: dict[int, tuple[float, float]] = {}
+    pos_x = 0.0
+    pos_y = 0.0
+    for row in kb_json.layout.keys:
+        for k in row:
+            w = k.w if k.w is not None else 1.0
+            h = k.h if k.h is not None else 1.0
+            pos_x += k.x if k.x is not None else 0.0
+            pos_y += k.y if k.y is not None else 0.0
+            if k.option is None or k.option[1] == 0:
+                if k.key not in key_centers:
+                    key_centers[k.key] = (pos_x + w * 0.5, pos_y + h * 0.5)
+            pos_x += w
+        pos_x = 0.0
+        pos_y += 1.0
+
+    if kb_json.encoders is not None:
+        for enc in kb_json.encoders:
+            cx = enc.x + enc.w * 0.5
+            cy = enc.y + enc.h * 0.5
+            if enc.button_key is not None:
+                key_centers[enc.button_key] = (cx, cy)
+            for ek in enc.keys:
+                if ek not in key_centers:
+                    key_centers[ek] = (cx, cy)
+
+    raw_coords: list[tuple[float, float]] = []
+    for i in range(num_leds):
+        if kb_json.rgb.led_positions is not None and i < len(kb_json.rgb.led_positions):
+            raw_coords.append(kb_json.rgb.led_positions[i])
+        else:
+            mapped_key = key_map[i] if i < len(key_map) else None
+            if mapped_key is not None and mapped_key in key_centers:
+                raw_coords.append(key_centers[mapped_key])
+            else:
+                raw_coords.append((float(i), 0.0))
+
+    xs = [c[0] for c in raw_coords]
+    ys = [c[1] for c in raw_coords]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    span_x = (max_x - min_x) if max_x > min_x else 1.0
+    span_y = (max_y - min_y) if max_y > min_y else 1.0
+
+    normalized: list[tuple[int, int]] = []
+    for cx, cy in raw_coords:
+        nx = int(round(((cx - min_x) / span_x) * 255.0)) if max_x > min_x else 128
+        ny = int(round(((cy - min_y) / span_y) * 255.0)) if max_y > min_y else 128
+        normalized.append((max(0, min(255, nx)), max(0, min(255, ny))))
+    return normalized
+
+
 # Estimate minimum wear-leveling virtual storage size in bytes for eeconfig_t
 def compute_min_wl_virtual_size(kb_json: Keyboard) -> int:
     num_keys = kb_json.num_keys or 1
     num_layers = kb_json.num_layers or 4
     num_profiles = kb_json.num_profiles or 4
     num_adv = kb_json.num_advanced_keys or 1
+    rgb_storage_leds = max(num_keys, kb_json.rgb.num_leds if kb_json.rgb else 0)
 
     # Header + calibration + bottom_out_threshold + distance_lut(2048) + per-profile
     global_bytes = 32 + (4 + num_keys) + (2 * num_keys) + 2048
@@ -151,6 +240,9 @@ def compute_min_wl_virtual_size(kb_json: Keyboard) -> int:
         + (num_keys * 11)
         + (num_adv * 13)
         + num_keys
+        + 10
+        + 10
+        + (rgb_storage_leds * 3)
         + 16
     )
     est_bytes = global_bytes + (num_profiles * per_profile)

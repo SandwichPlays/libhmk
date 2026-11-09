@@ -85,6 +85,16 @@ def keyboard_metadata_def():
         "numKeys": kb_json.num_keys,
         "numAdvancedKeys": kb_json.num_advanced_keys,
         "analogKeys": sorted(utils.get_analog_key_set(kb_json)),
+        **(
+            {
+                "rgb": {
+                    "numLeds": kb_json.rgb.num_leds,
+                    "keyMap": utils.resolve_rgb_key_map(kb_json),
+                }
+            }
+            if kb_json.rgb is not None
+            else {}
+        ),
         "layout": layout_dict,
         "encoders": layout_dict.get("encoders"),
         "defaultKeymaps": utils.resolve_default_keymaps(kb_json),

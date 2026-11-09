@@ -138,6 +138,7 @@ class Metadata:
     encoder_timers: dict[tuple[str, str], tuple[str, str, str]] = field(
         default_factory=dict
     )
+    rgb_timers: dict[str, list[tuple[str, int, str]]] = field(default_factory=dict)
     mux_timer: str | None = None
 
     def is_valid_gpio_pin(self, pin: str) -> bool:
@@ -161,6 +162,38 @@ class Metadata:
                     else:
                         return (tmr, mux_2, mux_1)
         return ("NULL", "0", "0")
+
+    def resolve_rgb_timer(
+        self,
+        pin: str,
+        requested_timer: str | None = None,
+        requested_channel: int | None = None,
+        used_timers: dict[str, str] | None = None,
+    ) -> tuple[str, int, str] | None:
+        candidates = self.rgb_timers.get(pin, [])
+        for tmr, ch, mux in candidates:
+            if requested_timer is not None and tmr != requested_timer:
+                continue
+            if requested_channel is not None and ch != requested_channel:
+                continue
+            if used_timers is not None and tmr in used_timers and requested_timer is None:
+                continue
+            return (tmr, ch, mux)
+        # Fallback if all candidates conflicted so caller can report exact timer conflict
+        for tmr, ch, mux in candidates:
+            if requested_timer is not None and tmr != requested_timer:
+                continue
+            if requested_channel is not None and ch != requested_channel:
+                continue
+            return (tmr, ch, mux)
+        if requested_timer is not None and requested_channel is not None:
+            default_mux = (
+                "GPIO_MUX_1"
+                if requested_timer in ("TMR1", "TMR2", "TIM1", "TIM2")
+                else "GPIO_MUX_2"
+            )
+            return (requested_timer, requested_channel, default_mux)
+        return None
 
 
 @dataclass
@@ -206,6 +239,36 @@ _AT32F405_ENCODER_TIMERS: dict[tuple[str, str], tuple[str, str, str]] = {
     ("B4", "B5"): ("TMR3", "GPIO_MUX_2", "GPIO_MUX_2"),
     ("C6", "C7"): ("TMR3", "GPIO_MUX_2", "GPIO_MUX_2"),
     ("B6", "B7"): ("TMR4", "GPIO_MUX_2", "GPIO_MUX_2"),
+}
+
+_AT32F405_RGB_TIMERS: dict[str, list[tuple[str, int, str]]] = {
+    "A8": [("TMR1", 1, "GPIO_MUX_1")],
+    "A9": [("TMR1", 2, "GPIO_MUX_1")],
+    "A10": [("TMR1", 3, "GPIO_MUX_1")],
+    "A11": [("TMR1", 4, "GPIO_MUX_1")],
+    "A0": [("TMR2", 1, "GPIO_MUX_1")],
+    "A1": [("TMR2", 2, "GPIO_MUX_1")],
+    "A2": [("TMR2", 3, "GPIO_MUX_1")],
+    "A3": [("TMR2", 4, "GPIO_MUX_1")],
+    "A5": [("TMR2", 1, "GPIO_MUX_1")],
+    "A15": [("TMR2", 1, "GPIO_MUX_1")],
+    "B3": [("TMR2", 2, "GPIO_MUX_1")],
+    "B10": [("TMR2", 3, "GPIO_MUX_1")],
+    "B11": [("TMR2", 4, "GPIO_MUX_1")],
+    "A6": [("TMR3", 1, "GPIO_MUX_2")],
+    "A7": [("TMR3", 2, "GPIO_MUX_2")],
+    "B0": [("TMR3", 3, "GPIO_MUX_2")],
+    "B1": [("TMR3", 4, "GPIO_MUX_2")],
+    "B4": [("TMR3", 1, "GPIO_MUX_2")],
+    "B5": [("TMR3", 2, "GPIO_MUX_2")],
+    "C6": [("TMR3", 1, "GPIO_MUX_2")],
+    "C7": [("TMR3", 2, "GPIO_MUX_2")],
+    "C8": [("TMR3", 3, "GPIO_MUX_2")],
+    "C9": [("TMR3", 4, "GPIO_MUX_2")],
+    "B6": [("TMR4", 1, "GPIO_MUX_2")],
+    "B7": [("TMR4", 2, "GPIO_MUX_2")],
+    "B8": [("TMR4", 3, "GPIO_MUX_2")],
+    "B9": [("TMR4", 4, "GPIO_MUX_2")],
 }
 
 _STM32F446_SAMPLE_CYCLES_MAP: dict[float, str] = {
@@ -328,6 +391,7 @@ AT32F405XX = Driver(
         ),
         valid_ports=["A", "B", "C", "D", "F"],
         encoder_timers=_AT32F405_ENCODER_TIMERS,
+        rgb_timers=_AT32F405_RGB_TIMERS,
         mux_timer="TMR6",
     ),
 )
@@ -369,6 +433,7 @@ AT32F405XB = Driver(
         ),
         valid_ports=["A", "B", "C", "D", "F"],
         encoder_timers=_AT32F405_ENCODER_TIMERS,
+        rgb_timers=_AT32F405_RGB_TIMERS,
         mux_timer="TMR6",
     ),
 )

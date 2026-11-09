@@ -329,13 +329,29 @@ if kb_json.encoders is not None:
 if kb_json.rgb is not None:
     rgb = kb_json.rgb
     rgb_port, rgb_pin = driver.metadata.adc.to_gpio(rgb.pin)
+    resolved_rgb = driver.metadata.resolve_rgb_timer(
+        rgb.pin, rgb.timer, rgb.channel
+    )
+    assert resolved_rgb is not None
+    rgb_tmr, rgb_ch, rgb_mux = resolved_rgb
+
+    rgb_key_map = utils.resolve_rgb_key_map(kb_json)
+    c_rgb_key_map = [255 if k is None else k for k in rgb_key_map]
+    rgb_positions = utils.resolve_rgb_led_positions(kb_json)
+    c_rgb_positions = [[x, y] for x, y in rgb_positions]
+
     build_flags.define("RGB_ENABLE")
     build_flags.define("RGB_PORT", rgb_port)
     build_flags.define("RGB_PIN", rgb_pin)
+    build_flags.define("RGB_PIN_MUX", rgb_mux)
     build_flags.define("RGB_NUM_LEDS", rgb.num_leds)
-    build_flags.define("RGB_TIMER", rgb.timer)
-    build_flags.define("RGB_TIMER_CHANNEL", rgb.channel)
+    build_flags.define("RGB_TIMER", rgb_tmr)
+    build_flags.define("RGB_TIMER_CHANNEL", rgb_ch)
     build_flags.define("RGB_MAX_CURRENT_MA", rgb.max_current_ma)
+    if rgb.open_drain:
+        build_flags.define("RGB_OPEN_DRAIN")
+    build_flags.define("RGB_KEY_MAP", utils.to_c_array(c_rgb_key_map))
+    build_flags.define("RGB_LED_POSITIONS", utils.to_c_array(c_rgb_positions))
 
 # Add source build flags
 env.Append(BUILD_FLAGS=build_flags.get_flags())

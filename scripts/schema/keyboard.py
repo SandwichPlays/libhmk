@@ -136,12 +136,14 @@ class KeyboardTuning(BaseModel):
 class KeyboardRGB(BaseModel):
     pin: str
     type: str = Field(default="ws2812", pattern=r"^(ws2812|sk6812)$")
-    num_leds: PositiveInt
-    timer: str = "TMR1"
-    channel: int = Field(default=1, ge=1, le=4)
+    num_leds: PositiveInt = Field(le=256)
+    open_drain: bool = False
+    timer: str | None = None
+    channel: int | None = Field(default=None, ge=1, le=4)
     dma_channel: int = Field(default=2, ge=2, le=7)
     max_current_ma: PositiveInt = 400
-    key_map: list[NonNegativeInt] | None = None
+    key_map: list[NonNegativeInt | None] | None = None
+    led_positions: list[tuple[float, float]] | None = None
 
 
 class KeyboardWearLeveling(BaseModel):

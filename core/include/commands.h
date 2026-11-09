@@ -60,6 +60,10 @@ typedef enum {
   COMMAND_SET_GAMEPAD_BUTTONS,
   COMMAND_GET_GAMEPAD_OPTIONS,
   COMMAND_SET_GAMEPAD_OPTIONS,
+  COMMAND_GET_RGB_OPTIONS,
+  COMMAND_SET_RGB_OPTIONS,
+  COMMAND_GET_RGB_COLORS,
+  COMMAND_SET_RGB_COLORS,
 
   COMMAND_UNKNOWN = 255,
 } command_id_t;
@@ -152,6 +156,20 @@ typedef struct __attribute__((packed)) {
 } command_in_gamepad_options_t;
 
 typedef struct __attribute__((packed)) {
+  uint8_t profile;
+  rgb_options_t rgb_options;
+} command_in_rgb_options_t;
+
+#define RGB_COLORS_MAX_PACKET_ENTRIES 20
+
+typedef struct __attribute__((packed)) {
+  uint8_t profile;
+  uint8_t offset;
+  uint8_t len;
+  rgb_color_t rgb_colors[RGB_COLORS_MAX_PACKET_ENTRIES];
+} command_in_rgb_colors_t;
+
+typedef struct __attribute__((packed)) {
   uint8_t count;
   uint8_t keys[60];
 } command_in_start_manual_calib_t;
@@ -195,6 +213,8 @@ typedef struct __attribute__((packed)) {
     command_in_tick_rate_t tick_rate;
     command_in_gamepad_buttons_t gamepad_buttons;
     command_in_gamepad_options_t gamepad_options;
+    command_in_rgb_options_t rgb_options;
+    command_in_rgb_colors_t rgb_colors;
     command_in_start_manual_calib_t start_manual_calib;
     command_in_finish_manual_calib_t finish_manual_calib;
     command_in_get_switch_lut_t get_switch_lut;
@@ -251,6 +271,10 @@ typedef struct __attribute__((packed)) {
     uint8_t gamepad_buttons[63];
     // For `COMMAND_GET_GAMEPAD_OPTIONS`
     gamepad_options_t gamepad_options;
+    // For `COMMAND_GET_RGB_OPTIONS`
+    rgb_options_t rgb_options;
+    // For `COMMAND_GET_RGB_COLORS`
+    rgb_color_t rgb_colors[21];
     // For `COMMAND_SCAN_RATE`
     scan_rate_t scan_rate;
     // For `COMMAND_GET_SWITCH_LUT`

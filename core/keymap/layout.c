@@ -24,6 +24,7 @@
 #include "keycodes.h"
 #include "lib/bitmap.h"
 #include "matrix.h"
+#include "rgb.h"
 #include "xinput.h"
 
 // Layer mask. Each bit represents whether a layer is active or not.
@@ -318,6 +319,34 @@ void layout_register(uint8_t key, uint8_t keycode) {
 
   case SP_BOOT:
     board_enter_bootloader();
+    break;
+
+  case SP_RGB_TOG:
+    rgb_toggle();
+    break;
+
+  case SP_RGB_MOD:
+    rgb_step_mode(true);
+    break;
+
+  case SP_RGB_RMOD:
+    rgb_step_mode(false);
+    break;
+
+  case SP_RGB_VAI:
+    rgb_step_brightness(true);
+    break;
+
+  case SP_RGB_VAD:
+    rgb_step_brightness(false);
+    break;
+
+  case SP_RGB_SPI:
+    rgb_step_speed(true);
+    break;
+
+  case SP_RGB_SPD:
+    rgb_step_speed(false);
     break;
 
   default:

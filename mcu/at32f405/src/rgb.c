@@ -57,12 +57,20 @@ void hardware_rgb_init(void) {
   gpio_default_para_init(&gpio_init_struct);
   gpio_init_struct.gpio_pins = RGB_PIN;
   gpio_init_struct.gpio_mode = GPIO_MODE_MUX;
+#if defined(RGB_OPEN_DRAIN)
+  gpio_init_struct.gpio_out_type = GPIO_OUTPUT_OPEN_DRAIN;
+#else
   gpio_init_struct.gpio_out_type = GPIO_OUTPUT_PUSH_PULL;
+#endif
   gpio_init_struct.gpio_pull = GPIO_PULL_NONE;
   gpio_init_struct.gpio_drive_strength = GPIO_DRIVE_STRENGTH_STRONGER;
   gpio_init(port, &gpio_init_struct);
 
+#if defined(RGB_PIN_MUX)
+  gpio_mux_sel_type mux = RGB_PIN_MUX;
+#else
   gpio_mux_sel_type mux = (tmr == TMR1 || tmr == TMR2) ? GPIO_MUX_1 : GPIO_MUX_2;
+#endif
   gpio_pin_mux_config(port, get_pin_source(RGB_PIN), mux);
 
   tmr_base_init(tmr, WS2812_PWM_PERIOD, 0);
@@ -96,7 +104,7 @@ void hardware_rgb_init(void) {
   if (tmr == TMR1) {
     tmr_output_enable(tmr, TRUE);
   }
-  tmr_dma_control_enable(tmr, TMR_DMA_REQUEST_OVF, TRUE);
+  tmr_dma_request_enable(tmr, TMR_OVERFLOW_DMA_REQUEST, TRUE);
 
   dmamux_enable(DMA1, TRUE);
   if (tmr == TMR1) dmamux_init(DMA1MUX_CHANNEL2, DMAMUX_DMAREQ_ID_TMR1_OVERFLOW);

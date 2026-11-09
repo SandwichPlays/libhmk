@@ -27,6 +27,12 @@
       "h": 1
     }
   ],
+  "rgb": {
+    "pin": "B6",
+    "type": "sk6812",
+    "num_leds": 4,
+    "open_drain": true
+  },
   "layout": {
     "keys": [
       [

@@ -28,7 +28,26 @@ void rgb_init(void);
 void rgb_set_led(uint32_t index, uint8_t r, uint8_t g, uint8_t b);
 
 /**
- * @brief Run periodic RGB animations & non-blocking DMA transmission (~120 Hz)
+ * @brief Run periodic RGB animations & non-blocking DMA transmission (~125 Hz)
  */
 void rgb_task(void);
 
+/**
+ * @brief Toggle RGB lighting between OFF and the last active mode
+ */
+void rgb_toggle(void);
+
+/**
+ * @brief Cycle RGB lighting effect mode forward or backward
+ */
+void rgb_step_mode(bool forward);
+
+/**
+ * @brief Step RGB brightness up or down
+ */
+void rgb_step_brightness(bool increase);
+
+/**
+ * @brief Step RGB animation speed up or down
+ */
+void rgb_step_speed(bool increase);

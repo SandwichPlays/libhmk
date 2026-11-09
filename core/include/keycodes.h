@@ -203,6 +203,13 @@ typedef enum {
   SP_PROFILE_SWAP = 0xD2,
   SP_PROFILE_NEXT = 0xD3,
   SP_BOOT = 0xD4,
+  SP_RGB_TOG = 0xD5,
+  SP_RGB_MOD = 0xD6,
+  SP_RGB_RMOD = 0xD7,
+  SP_RGB_VAI = 0xD8,
+  SP_RGB_VAD = 0xD9,
+  SP_RGB_SPI = 0xDA,
+  SP_RGB_SPD = 0xDB,
 
   XXXXXXX = KC_NO,
   _______ = KC_TRANSPARENT,
@@ -311,6 +318,13 @@ typedef enum {
   LY_LOCK = SP_LAYER_LOCK,
   PF_SWAP = SP_PROFILE_SWAP,
   PF_NEXT = SP_PROFILE_NEXT,
+  RGB_TOG = SP_RGB_TOG,
+  RGB_MOD = SP_RGB_MOD,
+  RGB_RMOD = SP_RGB_RMOD,
+  RGB_VAI = SP_RGB_VAI,
+  RGB_VAD = SP_RGB_VAD,
+  RGB_SPI = SP_RGB_SPI,
+  RGB_SPD = SP_RGB_SPD,
 } keycode_t;
 
 // Map keycodes to their corresponding HID codes

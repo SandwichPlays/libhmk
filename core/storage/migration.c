@@ -54,6 +54,14 @@ static bool v1_9_global_config_func(uint8_t *dst, const uint8_t *src);
 static bool v1_9_profile_config_func(uint8_t profile, uint8_t *dst,
                                      const uint8_t *src);
 
+static bool v1_10_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_10_profile_config_func(uint8_t profile, uint8_t *dst,
+                                      const uint8_t *src);
+
+static bool v1_11_global_config_func(uint8_t *dst, const uint8_t *src);
+static bool v1_11_profile_config_func(uint8_t profile, uint8_t *dst,
+                                      const uint8_t *src);
+
 // Migration metadata for each configuration version. The first entry is
 // reserved for the initial version (v1.0) which does not require migration.
 static const migration_t migrations[] = {
@@ -199,6 +207,40 @@ static const migration_t migrations[] = {
         ,
         .global_config_func = v1_9_global_config_func,
         .profile_config_func = v1_9_profile_config_func,
+    },
+    {
+        .version = 0x010A,
+        .global_config_size = 14             // Other fields
+                               + NUM_KEYS * 3 // Bottom-out threshold and switch_travel
+                               + DISTANCE_LUT_SIZE * sizeof(uint16_t) // Distance LUT
+        ,
+        .profile_config_size = NUM_LAYERS * NUM_KEYS    // Keymap
+                               + NUM_KEYS * 11          // Actuation map (16-bit + deadzones)
+                               + NUM_ADVANCED_KEYS * 13 // Advanced keys (16-bit bottom-out, 13 bytes each)
+                               + NUM_KEYS               // Gamepad buttons
+                               + 9                      // Gamepad options
+                               + 1                      // Tick rate
+        ,
+        .global_config_func = v1_10_global_config_func,
+        .profile_config_func = v1_10_profile_config_func,
+    },
+    {
+        .version = 0x010B,
+        .global_config_size = 14             // Other fields
+                               + NUM_KEYS * 3 // Bottom-out threshold and switch_travel
+                               + DISTANCE_LUT_SIZE * sizeof(uint16_t) // Distance LUT
+        ,
+        .profile_config_size = NUM_LAYERS * NUM_KEYS    // Keymap
+                               + NUM_KEYS * 11          // Actuation map (16-bit + deadzones)
+                               + NUM_ADVANCED_KEYS * 13 // Advanced keys (16-bit bottom-out, 13 bytes each)
+                               + NUM_KEYS               // Gamepad buttons
+                               + 9                      // Gamepad options
+                               + 1                      // Tick rate
+                               + sizeof(rgb_options_t)  // Per-profile RGB options
+                               + RGB_STORAGE_LEDS * sizeof(rgb_color_t) // Per-LED custom colors
+        ,
+        .global_config_func = v1_11_global_config_func,
+        .profile_config_func = v1_11_profile_config_func,
     },
 };
 
@@ -636,5 +678,58 @@ bool v1_9_profile_config_func(uint8_t profile, uint8_t *dst,
   migration_memcpy(&dst, &src,
                    NUM_LAYERS * NUM_KEYS + NUM_KEYS * 11 +
                        NUM_ADVANCED_KEYS * 13 + NUM_KEYS + 9 + 1);
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.9 -> v1.10 Migration
+//--------------------------------------------------------------------+
+
+bool v1_10_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x0109)
+    return false;
+
+  migration_memcpy(&dst, &src,
+                   14 + NUM_KEYS * 3 + DISTANCE_LUT_SIZE * sizeof(uint16_t));
+  return true;
+}
+
+bool v1_10_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  migration_memcpy(&dst, &src,
+                   NUM_LAYERS * NUM_KEYS + NUM_KEYS * 11 +
+                       NUM_ADVANCED_KEYS * 13 + NUM_KEYS + 9 + 1);
+  return true;
+}
+
+//--------------------------------------------------------------------+
+// v1.10 -> v1.11 Migration (Add per-profile RGB options & colors)
+//--------------------------------------------------------------------+
+
+bool v1_11_global_config_func(uint8_t *dst, const uint8_t *src) {
+  if (((eeconfig_t *)src)->version != 0x010A)
+    return false;
+
+  migration_memcpy(&dst, &src,
+                   14 + NUM_KEYS * 3 + DISTANCE_LUT_SIZE * sizeof(uint16_t));
+  return true;
+}
+
+bool v1_11_profile_config_func(uint8_t profile, uint8_t *dst,
+                               const uint8_t *src) {
+  migration_memcpy(&dst, &src,
+                   NUM_LAYERS * NUM_KEYS + NUM_KEYS * 11 +
+                       NUM_ADVANCED_KEYS * 13 + NUM_KEYS + 9 + 1);
+
+  rgb_options_t default_rgb = DEFAULT_RGB_OPTIONS;
+  memcpy(dst, &default_rgb, sizeof(rgb_options_t));
+  dst += sizeof(rgb_options_t);
+
+  for (uint32_t i = 0; i < RGB_STORAGE_LEDS; i++) {
+    *dst++ = 0;
+    *dst++ = 180;
+    *dst++ = 255;
+  }
+
   return true;
 }

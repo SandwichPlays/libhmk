@@ -77,12 +77,14 @@ typedef struct __attribute__((packed)) {
   uint8_t gamepad_buttons[NUM_KEYS];
   gamepad_options_t gamepad_options;
   uint8_t tick_rate;
+  rgb_options_t rgb_options;
+  rgb_color_t rgb_colors[RGB_STORAGE_LEDS];
 } eeconfig_profile_t;
 
 // Persistent configuration version. The size of the configuration must be
 // non-decreasing, so that the migration can assume that the new version is at
 // least as large as the previous version.
-#define EECONFIG_VERSION 0x010A
+#define EECONFIG_VERSION 0x010B
 
 // Keyboard configuration
 // Whenever there is a change in the configuration, `EECONFIG_VERSION` must be
@@ -191,6 +193,19 @@ extern const eeconfig_t *eeconfig;
 #if !defined(DEFAULT_TICK_RATE)
 // Default tick rate
 #define DEFAULT_TICK_RATE 30
+#endif
+
+#if !defined(DEFAULT_RGB_OPTIONS)
+// Default per-profile RGB options
+#define DEFAULT_RGB_OPTIONS                                                    \
+  {                                                                            \
+      .mode = RGB_MODE_RAINBOW,                                                \
+      .brightness = 200,                                                       \
+      .speed = 128,                                                            \
+      .direction = RGB_DIR_LEFT_TO_RIGHT,                                      \
+      .color1 = {.r = 0, .g = 180, .b = 255},                                  \
+      .color2 = {.r = 255, .g = 0, .b = 128},                                  \
+  }
 #endif
 
 //--------------------------------------------------------------------+

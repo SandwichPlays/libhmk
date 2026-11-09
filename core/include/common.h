@@ -255,3 +255,51 @@ typedef struct __attribute__((packed)) {
     uint8_t options;
   };
 } gamepad_options_t;
+
+// RGB lighting effect modes
+typedef enum {
+  RGB_MODE_OFF = 0,
+  RGB_MODE_SOLID,
+  RGB_MODE_PER_KEY,
+  RGB_MODE_BREATHING,
+  RGB_MODE_RAINBOW,
+  RGB_MODE_WAVE,
+  RGB_MODE_REACTIVE,
+  RGB_MODE_ANALOG_DEPTH,
+  RGB_MODE_COUNT,
+} rgb_mode_t;
+
+// RGB directional wave / gradient directions
+typedef enum {
+  RGB_DIR_LEFT_TO_RIGHT = 0,
+  RGB_DIR_RIGHT_TO_LEFT,
+  RGB_DIR_TOP_TO_BOTTOM,
+  RGB_DIR_BOTTOM_TO_TOP,
+  RGB_DIR_CENTER_OUT,
+  RGB_DIR_COUNT,
+} rgb_direction_t;
+
+// RGB 24-bit color
+typedef struct __attribute__((packed)) {
+  uint8_t r;
+  uint8_t g;
+  uint8_t b;
+} rgb_color_t;
+
+// Per-profile RGB options configuration
+typedef struct __attribute__((packed)) {
+  uint8_t mode;
+  uint8_t brightness;
+  uint8_t speed;
+  uint8_t direction;
+  rgb_color_t color1;
+  rgb_color_t color2;
+} rgb_options_t;
+
+_Static_assert(sizeof(rgb_options_t) == 10, "Invalid rgb_options_t size");
+
+#if defined(RGB_ENABLE) && (RGB_NUM_LEDS > NUM_KEYS)
+#define RGB_STORAGE_LEDS RGB_NUM_LEDS
+#else
+#define RGB_STORAGE_LEDS NUM_KEYS
+#endif

@@ -360,6 +360,49 @@ void command_process(const uint8_t *buf) {
                              &p->gamepad_options);
     break;
   }
+  case COMMAND_GET_RGB_OPTIONS: {
+    const command_in_rgb_options_t *p = &in->rgb_options;
+
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+
+    out->rgb_options = eeconfig->profiles[p->profile].rgb_options;
+    break;
+  }
+  case COMMAND_SET_RGB_OPTIONS: {
+    const command_in_rgb_options_t *p = &in->rgb_options;
+
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    COMMAND_VERIFY(p->rgb_options.mode < RGB_MODE_COUNT);
+    COMMAND_VERIFY(p->rgb_options.direction < RGB_DIR_COUNT);
+
+    success = EECONFIG_WRITE(profiles[p->profile].rgb_options, &p->rgb_options);
+    break;
+  }
+  case COMMAND_GET_RGB_COLORS: {
+    const command_in_rgb_colors_t *p = &in->rgb_colors;
+
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    COMMAND_VERIFY(p->offset < RGB_STORAGE_LEDS);
+
+    memcpy(out->rgb_colors,
+           eeconfig->profiles[p->profile].rgb_colors + p->offset,
+           M_MIN(M_ARRAY_SIZE(out->rgb_colors),
+                 (uint32_t)(RGB_STORAGE_LEDS - p->offset)) *
+               sizeof(rgb_color_t));
+    break;
+  }
+  case COMMAND_SET_RGB_COLORS: {
+    const command_in_rgb_colors_t *p = &in->rgb_colors;
+
+    COMMAND_VERIFY(p->profile < NUM_PROFILES);
+    COMMAND_VERIFY(p->offset < RGB_STORAGE_LEDS);
+    COMMAND_VERIFY(p->len <= M_ARRAY_SIZE(p->rgb_colors) &&
+                   p->len <= RGB_STORAGE_LEDS - p->offset);
+
+    success = EECONFIG_WRITE_N(profiles[p->profile].rgb_colors[p->offset],
+                               p->rgb_colors, sizeof(rgb_color_t) * p->len);
+    break;
+  }
   case COMMAND_GET_SWITCH_LUT: {
     const command_in_get_switch_lut_t *p = &in->get_switch_lut;
 
