@@ -333,7 +333,11 @@ __attribute__((section(".ramfunc"))) void matrix_scan(void) {
       }
       last_raw_val[i] = raw_val;
 
-      uint16_t new_adc_filtered = EMA(effective_raw, prev_filtered);
+      uint16_t new_adc_filtered =
+          (abs((int32_t)effective_raw - (int32_t)prev_filtered) >
+           MATRIX_EMA_STEP_BYPASS_THRESHOLD)
+              ? effective_raw
+              : EMA(effective_raw, prev_filtered);
       key_matrix[i].adc_filtered = new_adc_filtered;
 
       // Stability auto-baseline recovery (only when key reading drops below rest)

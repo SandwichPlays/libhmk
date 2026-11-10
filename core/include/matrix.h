@@ -37,6 +37,11 @@
 #define MATRIX_EMA_ALPHA_SHIFT 4
 #endif
 
+#if !defined(MATRIX_EMA_STEP_BYPASS_THRESHOLD)
+// Fast step-jump bypass threshold in ADC counts for EMA filter
+#define MATRIX_EMA_STEP_BYPASS_THRESHOLD 30
+#endif
+
 #if !defined(MATRIX_CALIBRATION_EPSILON)
 // Minimum change in ADC values required to update the calibration values. This
 // is used to mitigate the inconsistency of the Hall effect sensors.
