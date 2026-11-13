@@ -53,9 +53,24 @@
 #define MATRIX_DEBOUNCE_MS 2
 #endif
 
+#if !defined(HALL_NOISE_GATE_ADC_UNITS)
+// Noise gate window in ADC counts for resting baseline drift tracking
+#define HALL_NOISE_GATE_ADC_UNITS 20
+#endif
+
+#if !defined(HALL_MAX_REST_UPWARD_DRIFT)
+// Maximum upward thermal drift allowed above calibrated baseline
+#define HALL_MAX_REST_UPWARD_DRIFT 25
+#endif
+
 #if !defined(MATRIX_BASELINE_DOWN_TIME_MS)
-// Fast auto-baseline recovery duration for downward shifts / boot-held keys (20ms)
+// Fast auto-baseline recovery duration for small downward shifts (20ms)
 #define MATRIX_BASELINE_DOWN_TIME_MS 20
+#endif
+
+#if !defined(MATRIX_REST_UPWARD_IDLE_TIME_MS)
+// Idle duration in milliseconds of zero motion before allowing 1 ADC count upward drift
+#define MATRIX_REST_UPWARD_IDLE_TIME_MS 3000
 #endif
 
 #if !defined(MATRIX_HYST_GAP)

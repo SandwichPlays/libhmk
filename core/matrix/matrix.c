@@ -97,8 +97,11 @@ static bool manual_calib_active = false;
 static uint8_t manual_calib_status[NUM_KEYS] = {0};
 static uint16_t manual_calib_peak[NUM_KEYS] = {0};
 
-static uint32_t stable_timer[NUM_KEYS] = {0};
-static uint16_t stable_ref[NUM_KEYS] = {0};
+static uint32_t idle_timer[NUM_KEYS] = {0};
+static uint16_t idle_ref[NUM_KEYS] = {0};
+static uint32_t down_timer[NUM_KEYS] = {0};
+static uint16_t down_ref[NUM_KEYS] = {0};
+static uint16_t base_cal_rest[NUM_KEYS] = {0};
 static uint16_t switch_travel_um[NUM_KEYS] = {0};
 static uint16_t raw_boot_rest[NUM_KEYS] = {0};
 static uint16_t last_raw_val[NUM_KEYS] = {0};
@@ -162,15 +165,18 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
     raw_boot_rest[i] = 0;
     last_raw_val[i] = 0;
-    stable_ref[i] = key_matrix[i].adc_filtered;
+    idle_timer[i] = timer_read();
+    down_timer[i] = idle_timer[i];
+    idle_ref[i] = key_matrix[i].adc_filtered;
+    down_ref[i] = key_matrix[i].adc_filtered;
     key_matrix[i].adc_rest_value = key_matrix[i].adc_filtered;
+    base_cal_rest[i] = key_matrix[i].adc_filtered;
     key_matrix[i].distance = 0;
     key_matrix[i].extremum = 0;
     key_matrix[i].key_dir = KEY_DIR_INACTIVE;
     key_matrix[i].is_pressed = false;
     press_cycle_start[i] = 0;
     release_cycle_start[i] = 0;
-    stable_timer[i] = timer_read();
   }
   for (uint32_t idx = 0; idx < MATRIX_NUM_ANALOG_KEYS; idx++) {
     const uint32_t i = ANALOG_KEY_AT(idx);
@@ -200,6 +206,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   for (uint32_t idx = 0; idx < MATRIX_NUM_ANALOG_KEYS; idx++) {
     const uint32_t i = ANALOG_KEY_AT(idx);
     raw_boot_rest[i] = analog_read(i);
+    base_cal_rest[i] = key_matrix[i].adc_rest_value;
     key_matrix[i].adc_bottom_out_value =
         matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
   }
@@ -299,6 +306,7 @@ __attribute__((section(".ramfunc"))) void matrix_scan(void) {
           if (raw_current + 150 < raw_boot_rest[i]) {
             bitmap_set(key_inverted, i, true);
             key_matrix[i].adc_rest_value = ADC_MAX_VALUE - raw_boot_rest[i];
+            base_cal_rest[i] = key_matrix[i].adc_rest_value;
             key_matrix[i].adc_filtered = ADC_MAX_VALUE - raw_current;
             key_matrix[i].adc_bottom_out_value =
                 matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
@@ -307,6 +315,7 @@ __attribute__((section(".ramfunc"))) void matrix_scan(void) {
           if (raw_current > raw_boot_rest[i] + 150) {
             bitmap_set(key_inverted, i, false);
             key_matrix[i].adc_rest_value = raw_boot_rest[i];
+            base_cal_rest[i] = key_matrix[i].adc_rest_value;
             key_matrix[i].adc_filtered = raw_current;
             key_matrix[i].adc_bottom_out_value =
                 matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
@@ -340,27 +349,83 @@ __attribute__((section(".ramfunc"))) void matrix_scan(void) {
               : EMA(effective_raw, prev_filtered);
       key_matrix[i].adc_filtered = new_adc_filtered;
 
-      // Stability auto-baseline recovery (only when key reading drops below rest)
-      if (key_matrix[i].is_pressed || manual_calib_active) {
-        stable_ref[i] = new_adc_filtered;
-        stable_timer[i] = now;
-      } else {
-        if (abs((int32_t)new_adc_filtered - (int32_t)stable_ref[i]) > 2) {
-          stable_ref[i] = new_adc_filtered;
-          stable_timer[i] = now;
-        } else if (new_adc_filtered < key_matrix[i].adc_rest_value) {
-          if (now - stable_timer[i] >= MATRIX_BASELINE_DOWN_TIME_MS) {
+      // Directional baseline drift tracking:
+      // - Downward recovery: fast 20ms debounce for small shifts, immediate snap for large drops.
+      // - Upward thermal drift: +1 ADC count only after 3 seconds of zero motion while released.
+      if (!key_matrix[i].is_pressed && !manual_calib_active) {
+        const uint16_t rest = key_matrix[i].adc_rest_value;
+        if (new_adc_filtered > rest) {
+          down_timer[i] = now;
+          down_ref[i] = new_adc_filtered;
+
+          const uint16_t diff = (uint16_t)(new_adc_filtered - rest);
+          if (diff <= HALL_NOISE_GATE_ADC_UNITS) {
+            // Must have zero motion (<= 1 ADC count) to be considered idle
+            if (abs((int32_t)new_adc_filtered - (int32_t)idle_ref[i]) > 1) {
+              idle_ref[i] = new_adc_filtered;
+              idle_timer[i] = now;
+            } else if (now - idle_timer[i] >= MATRIX_REST_UPWARD_IDLE_TIME_MS) {
+              idle_timer[i] = now;
+              const uint16_t max_rest =
+                  (uint16_t)M_MIN((uint32_t)base_cal_rest[i] + HALL_MAX_REST_UPWARD_DRIFT, ADC_MAX_VALUE);
+              if (rest < max_rest) {
+                const uint16_t new_rest = (uint16_t)(rest + 1u);
+                key_matrix[i].adc_rest_value = new_rest;
+                if (manual_calib_status[i] == CALIB_STATE_IDLE) {
+                  key_matrix[i].adc_bottom_out_value =
+                      matrix_bottom_out_value(i, new_rest);
+                }
+              }
+            }
+          } else {
+            idle_timer[i] = now;
+            idle_ref[i] = new_adc_filtered;
+          }
+        } else if (new_adc_filtered < rest) {
+          idle_timer[i] = now;
+          idle_ref[i] = new_adc_filtered;
+
+          const uint16_t diff = (uint16_t)(rest - new_adc_filtered);
+          if (diff >= HALL_NOISE_GATE_ADC_UNITS) {
+            // Large drop below rest: snap immediately
             key_matrix[i].adc_rest_value = new_adc_filtered;
+            if (new_adc_filtered < base_cal_rest[i]) {
+              base_cal_rest[i] = new_adc_filtered;
+            }
             if (manual_calib_status[i] == CALIB_STATE_IDLE) {
               key_matrix[i].adc_bottom_out_value =
-                  matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+                  matrix_bottom_out_value(i, new_adc_filtered);
             }
-            stable_timer[i] = now;
-            stable_ref[i] = new_adc_filtered;
+            down_timer[i] = now;
+            down_ref[i] = new_adc_filtered;
+          } else {
+            // Small drop below rest: verify stability before updating
+            if (abs((int32_t)new_adc_filtered - (int32_t)down_ref[i]) > 1) {
+              down_ref[i] = new_adc_filtered;
+              down_timer[i] = now;
+            } else if (now - down_timer[i] >= MATRIX_BASELINE_DOWN_TIME_MS) {
+              key_matrix[i].adc_rest_value = new_adc_filtered;
+              if (new_adc_filtered < base_cal_rest[i]) {
+                base_cal_rest[i] = new_adc_filtered;
+              }
+              if (manual_calib_status[i] == CALIB_STATE_IDLE) {
+                key_matrix[i].adc_bottom_out_value =
+                    matrix_bottom_out_value(i, new_adc_filtered);
+              }
+              down_timer[i] = now;
+              down_ref[i] = new_adc_filtered;
+            }
           }
         } else {
-          stable_timer[i] = now;
+          // Exactly at rest
+          down_timer[i] = now;
+          down_ref[i] = new_adc_filtered;
         }
+      } else {
+        idle_timer[i] = now;
+        idle_ref[i] = new_adc_filtered;
+        down_timer[i] = now;
+        down_ref[i] = new_adc_filtered;
       }
 
       if (manual_calib_active && manual_calib_status[i] != CALIB_STATE_IDLE) {
@@ -386,6 +451,7 @@ __attribute__((section(".ramfunc"))) void matrix_scan(void) {
             key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
           } else if (new_adc_filtered <= key_matrix[i].adc_rest_value + 30) {
             manual_calib_status[i] = CALIB_STATE_COMPLETED;
+            base_cal_rest[i] = key_matrix[i].adc_rest_value;
             key_matrix[i].adc_bottom_out_value = manual_calib_peak[i];
           }
         }
