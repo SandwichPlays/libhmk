@@ -22,6 +22,9 @@
 
 static const uint8_t encoder_keys[][2] = ENCODER_KEYS;
 static const uint8_t encoder_resolutions[] = ENCODER_RESOLUTIONS;
+#if defined(ENCODER_INVERTS)
+static const uint8_t encoder_inverts[] = ENCODER_INVERTS;
+#endif
 static const uint8_t encoder_button_keys[] = ENCODER_BUTTON_KEYS;
 
 static int16_t last_encoder_values[ENCODER_COUNT];
@@ -46,8 +49,10 @@ void encoder_init(void) {
 }
 
 void encoder_task(void) {
+#if ENCODER_HAS_POLLED
   // Poll GPIO quadrature state at full main-loop rate (~30 kHz+) for non-timer encoders
   hardware_encoder_poll();
+#endif
 
   static uint32_t last_encoder_ms = 0;
   uint32_t now = timer_read();
@@ -65,19 +70,17 @@ void encoder_task(void) {
 
     if (steps != 0) {
       last_encoder_values[i] += steps * res;
-      if (steps > 0) {
-        if (encoder_event_user((uint8_t)i, true)) {
-          uint8_t key = encoder_keys[i][1]; // CW
-          if (key < NUM_KEYS) {
-            encoder_pulse_queue[key] += (uint16_t)steps;
-          }
-        }
-      } else {
-        if (encoder_event_user((uint8_t)i, false)) {
-          uint8_t key = encoder_keys[i][0]; // CCW
-          if (key < NUM_KEYS) {
-            encoder_pulse_queue[key] += (uint16_t)(-steps);
-          }
+#if defined(ENCODER_INVERTS)
+      const bool cw = encoder_inverts[i] ? (steps < 0) : (steps > 0);
+#else
+      const bool cw = (steps > 0);
+#endif
+      const uint16_t abs_steps =
+          (uint16_t)(steps > 0 ? (int32_t)steps : -(int32_t)steps);
+      if (encoder_event_user((uint8_t)i, cw)) {
+        uint8_t key = encoder_keys[i][cw ? 1 : 0];
+        if (key < NUM_KEYS) {
+          encoder_pulse_queue[key] += abs_steps;
         }
       }
     }

@@ -113,6 +113,8 @@ class KeyboardEncoder(BaseModel):
     timer: str | None = None
     # Steps per detent
     resolution: PositiveInt = 4
+    # Invert hardware/software quadrature direction
+    invert: bool = False
     # Optional push-button GPIO pin and 0-indexed virtual key
     button_pin: str | None = None
     button_key: NonNegativeInt | None = None

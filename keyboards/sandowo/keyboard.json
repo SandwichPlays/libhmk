@@ -19,8 +19,9 @@
   "encoders": [
     {
       "pins": ["C7", "C6"],
-      "keys": [5, 4],
+      "keys": [4, 5],
       "resolution": 4,
+      "invert": true,
       "button_pin": "B10",
       "button_key": 6,
       "x": 0,

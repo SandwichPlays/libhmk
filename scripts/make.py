@@ -289,6 +289,7 @@ if kb_json.encoders is not None:
     encoder_pin_muxes = []
     encoder_keys = []
     encoder_resolutions = []
+    encoder_inverts = []
     encoder_button_ports = []
     encoder_button_pins = []
     encoder_button_keys = []
@@ -304,6 +305,7 @@ if kb_json.encoders is not None:
         encoder_pin_muxes.append([mux_a, mux_b])
         encoder_keys.append(encoder.keys)
         encoder_resolutions.append(encoder.resolution)
+        encoder_inverts.append(1 if encoder.invert else 0)
 
         if encoder.button_pin is not None:
             port, pin_num = driver.metadata.adc.to_gpio(encoder.button_pin)
@@ -315,12 +317,17 @@ if kb_json.encoders is not None:
             encoder_button_pins.append(0)
             encoder_button_keys.append(255)
 
+    build_flags.define(
+        "ENCODER_HAS_POLLED",
+        1 if any(tmr == "NULL" for tmr in encoder_timers) else 0,
+    )
     build_flags.define("ENCODER_TIMERS", utils.to_c_array(encoder_timers))
     build_flags.define("ENCODER_PORTS", utils.to_c_array(encoder_ports))
     build_flags.define("ENCODER_PINS", utils.to_c_array(encoder_pin_nums))
     build_flags.define("ENCODER_PIN_MUXES", utils.to_c_array(encoder_pin_muxes))
     build_flags.define("ENCODER_KEYS", utils.to_c_array(encoder_keys))
     build_flags.define("ENCODER_RESOLUTIONS", utils.to_c_array(encoder_resolutions))
+    build_flags.define("ENCODER_INVERTS", utils.to_c_array(encoder_inverts))
     build_flags.define("ENCODER_BUTTON_PORTS", utils.to_c_array(encoder_button_ports))
     build_flags.define("ENCODER_BUTTON_PINS", utils.to_c_array(encoder_button_pins))
     build_flags.define("ENCODER_BUTTON_KEYS", utils.to_c_array(encoder_button_keys))
