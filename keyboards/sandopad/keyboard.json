@@ -2,7 +2,7 @@
   "name": "SandoPad",
   "manufacturer": "Sando",
   "maintainer": "Sando",
-  "mcu": "at32f405kb",
+  "mcu": "at32f405rb",
   "crystal_hz": 12000000,
   "usb": {
     "vid": "0x5A4E",
