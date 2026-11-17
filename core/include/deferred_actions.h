@@ -74,6 +74,13 @@ void deferred_action_init(void);
  */
 bool deferred_action_push(const deferred_action_t *action);
 
+extern volatile uint32_t deferred_action_queue_size;
+
+__attribute__((always_inline)) static inline bool
+deferred_action_pending(void) {
+  return deferred_action_queue_size != 0;
+}
+
 /**
  * @brief Process all deferred actions and clear the stack
  *

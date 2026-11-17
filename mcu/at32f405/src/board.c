@@ -227,6 +227,19 @@ void board_error_handler(void) {
 
 void board_reset(void) { NVIC_SystemReset(); }
 
+void board_watchdog_init(void) {
+  crm_clock_source_enable(CRM_CLOCK_SOURCE_LICK, TRUE);
+  while (crm_flag_get(CRM_LICK_STABLE_FLAG) == RESET)
+    ;
+  wdt_register_write_enable(TRUE);
+  wdt_divider_set(WDT_CLK_DIV_64);
+  wdt_reload_value_set(2500u); // ~4.0 s timeout at 40 kHz LICK / 64
+  wdt_counter_reload();
+  wdt_enable();
+}
+
+void board_watchdog_feed(void) { wdt_counter_reload(); }
+
 void board_enter_bootloader(void) {
   // Set the bootloader flag
   BOARD_BOOTLOADER_FLAG = BOOTLOADER_MAGIC;

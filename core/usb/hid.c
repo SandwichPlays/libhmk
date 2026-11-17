@@ -29,6 +29,11 @@ static uint16_t system_report;
 static uint16_t consumer_report;
 static hid_mouse_report_t mouse_report;
 
+static uint16_t prev_system_report;
+static uint16_t prev_consumer_report;
+static hid_mouse_report_t prev_mouse_report;
+static bool hid_extra_dirty = false;
+
 #if !defined(HID_DISABLED)
 /**
  * @brief Send the keyboard report
@@ -37,7 +42,7 @@ static hid_mouse_report_t mouse_report;
  *
  * @return None
  */
-static void hid_send_keyboard_report(void) {
+__attribute__((section(".ramfunc"))) static void hid_send_keyboard_report(void) {
   static hid_nkro_kb_report_t prev_kb_report = {0};
 
   if (memcmp(&prev_kb_report, &kb_report, sizeof(prev_kb_report)) == 0)
@@ -56,11 +61,8 @@ static void hid_send_keyboard_report(void) {
  *
  * @return None
  */
-static void hid_send_hid_report(uint8_t starting_report_id) {
-  static uint16_t prev_system_report = 0;
-  static uint16_t prev_consumer_report = 0;
-  static hid_mouse_report_t prev_mouse_report = {0};
-
+__attribute__((section(".ramfunc"))) static void
+hid_send_hid_report(uint8_t starting_report_id) {
   for (uint8_t report_id = starting_report_id; report_id < REPORT_ID_COUNT;
        report_id++) {
     switch (report_id) {
@@ -96,11 +98,17 @@ static void hid_send_hid_report(uint8_t starting_report_id) {
       break;
     }
   }
+
+  hid_extra_dirty =
+      (system_report != prev_system_report) ||
+      (consumer_report != prev_consumer_report) ||
+      (memcmp(&prev_mouse_report, &mouse_report, sizeof(prev_mouse_report)) !=
+       0);
 }
 
 void hid_init(void) {}
 
-void hid_keycode_add(uint8_t keycode) {
+__attribute__((section(".ramfunc"))) void hid_keycode_add(uint8_t keycode) {
   const uint16_t hid_code = keycode_to_hid[keycode];
 
   if (!hid_code)
@@ -134,15 +142,22 @@ void hid_keycode_add(uint8_t keycode) {
     break;
 
   case SYSTEM_KEYCODE_RANGE:
-    system_report = hid_code;
+    if (system_report != hid_code) {
+      system_report = hid_code;
+      hid_extra_dirty = true;
+    }
     break;
 
   case CONSUMER_KEYCODE_RANGE:
-    consumer_report = hid_code;
+    if (consumer_report != hid_code) {
+      consumer_report = hid_code;
+      hid_extra_dirty = true;
+    }
     break;
 
   case MOUSE_KEYCODE_RANGE:
     mouse_report.buttons |= hid_code;
+    hid_extra_dirty = true;
     break;
 
   default:
@@ -150,7 +165,7 @@ void hid_keycode_add(uint8_t keycode) {
   }
 }
 
-void hid_keycode_remove(uint8_t keycode) {
+__attribute__((section(".ramfunc"))) void hid_keycode_remove(uint8_t keycode) {
   const uint16_t hid_code = keycode_to_hid[keycode];
 
   if (!hid_code)
@@ -175,19 +190,24 @@ void hid_keycode_remove(uint8_t keycode) {
     break;
 
   case SYSTEM_KEYCODE_RANGE:
-    if (system_report == hid_code)
+    if (system_report == hid_code) {
       // Only remove the system report if it matches the one we're trying to
       system_report = 0;
+      hid_extra_dirty = true;
+    }
     break;
 
   case CONSUMER_KEYCODE_RANGE:
-    if (consumer_report == hid_code)
+    if (consumer_report == hid_code) {
       // Only remove the consumer report if it matches the one we're trying to
       consumer_report = 0;
+      hid_extra_dirty = true;
+    }
     break;
 
   case MOUSE_KEYCODE_RANGE:
     mouse_report.buttons &= ~hid_code;
+    hid_extra_dirty = true;
     break;
 
   default:
@@ -195,7 +215,7 @@ void hid_keycode_remove(uint8_t keycode) {
   }
 }
 
-bool hid_send_reports(void) {
+__attribute__((section(".ramfunc"))) bool hid_send_reports(void) {
 #if !defined(HID_DISABLED)
   if (tud_suspended()) {
     // Wake up the host if it's suspended
@@ -209,8 +229,8 @@ bool hid_send_reports(void) {
 
   hid_send_keyboard_report();
 
-  if (!tud_hid_n_ready(USB_ITF_HID))
-    // HID endpoint busy, will be retried via report_complete_cb chain
+  if (!hid_extra_dirty || !tud_hid_n_ready(USB_ITF_HID))
+    // No secondary report dirty, or HID endpoint busy (retried via report_complete_cb chain)
     return true;
 
   // Start from the first report ID

@@ -97,11 +97,15 @@ void analog_init(void);
 extern volatile uint16_t adc_values[NUM_KEYS];
 
 /**
- * @brief Analog task (inline no-op for continuous DMA drivers)
+ * @brief Analog task (polls DMA completion on raw-only boards when IRQ is gated)
  *
  * @return None
  */
+#if defined(ANALOG_POLLING_TASK) && (ADC_NUM_MUX_INPUTS == 0)
+void analog_task(void);
+#else
 static inline void analog_task(void) {}
+#endif
 
 /**
  * @brief Read the raw ADC value of the specified key

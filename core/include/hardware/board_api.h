@@ -71,6 +71,20 @@ void board_enter_bootloader(void);
  */
 uint32_t board_serial(char *buf);
 
+/**
+ * @brief Initialize the hardware independent watchdog timer
+ *
+ * @return None
+ */
+void board_watchdog_init(void);
+
+/**
+ * @brief Feed/reload the hardware independent watchdog timer
+ *
+ * @return None
+ */
+void board_watchdog_feed(void);
+
 #if defined(FAST_INLINE_CYCLE_COUNT)
 /**
  * @brief Get the current cycle count

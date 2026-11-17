@@ -30,6 +30,9 @@
 #include "rgb.h"
 #include "scan_rate.h"
 
+__attribute__((weak)) void board_watchdog_init(void) {}
+__attribute__((weak)) void board_watchdog_feed(void) {}
+
 int main(void) {
   // Initialize the hardware
   board_init();
@@ -58,19 +61,34 @@ int main(void) {
   board_init_user();
 
   tud_init(BOARD_TUD_RHPORT);
+  board_watchdog_init();
 
+  uint32_t last_slow_ms = timer_read();
   while (1) {
     tud_task();
 
     analog_task();
     matrix_scan();
-    scan_rate_task();
+    if (scan_rate_is_active()) {
+      scan_rate_task();
+    }
     layout_task();
-    xinput_task();
-#if defined(ENCODER_ENABLE)
+    if (eeconfig->options.xinput_enabled) {
+      xinput_task();
+    }
+#if defined(ENCODER_ENABLE) && ENCODER_HAS_POLLED
     encoder_task();
 #endif
-    rgb_task();
+
+    const uint32_t now = timer_read();
+    if (now != last_slow_ms) {
+      last_slow_ms = now;
+      board_watchdog_feed();
+#if defined(ENCODER_ENABLE) && !ENCODER_HAS_POLLED
+      encoder_task();
+#endif
+      rgb_task();
+    }
   }
 
   return 0;

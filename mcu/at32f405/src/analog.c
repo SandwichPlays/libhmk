@@ -14,6 +14,7 @@
  */
 
 #include "hardware/hardware.h"
+#include "scan_rate.h"
 
 #include "at32f402_405.h"
 
@@ -187,8 +188,13 @@ void analog_init(void) {
   // Configure the DMA multiplexer to use ADC1
   dmamux_enable(DMA1, TRUE);
   dmamux_init(DMA1MUX_CHANNEL1, DMAMUX_DMAREQ_ID_ADC1);
-  // Enable DMA transfer complete interrupt
+#if ADC_NUM_MUX_INPUTS > 0
+  // Mux boards require DMA IRQ to sequence channels between conversions
   dma_interrupt_enable(DMA1_CHANNEL1, DMA_FDT_INT, TRUE);
+#else
+  // Raw-only boards poll DMA flags in analog_task() and only enable IRQ during benchmark
+  dma_interrupt_enable(DMA1_CHANNEL1, DMA_FDT_INT, FALSE);
+#endif
 
   // Enable ADC DMA mode
   adc_dma_mode_enable(ADC1, TRUE);
@@ -224,12 +230,41 @@ void analog_init(void) {
 
   // Wait for the ADC values to be initialized
   while (!adc_initialized)
-    ;
+    analog_task();
 }
 
 static volatile uint32_t analog_sweep_count = 0;
 
 uint32_t analog_get_sweep_count(void) { return analog_sweep_count; }
+
+#if ADC_NUM_MUX_INPUTS == 0 && ADC_NUM_RAW_INPUTS > 0
+static inline void analog_copy_raw_sweep(void) {
+  for (uint32_t i = 0; i < ADC_NUM_RAW_INPUTS; i++) {
+    const uint16_t key = raw_input_vector[i];
+    if (key)
+      adc_values[key - 1] = adc_buffer[i];
+  }
+  adc_initialized = true;
+  analog_sweep_count++;
+}
+
+__attribute__((section(".ramfunc"))) void analog_task(void) {
+  static bool dma_irq_enabled = false;
+  const bool want_irq = scan_rate_is_active();
+  if (want_irq != dma_irq_enabled) {
+    dma_irq_enabled = want_irq;
+    if (want_irq) {
+      DMA1_CHANNEL1->ctrl |= DMA_FDT_INT;
+    } else {
+      DMA1_CHANNEL1->ctrl &= ~DMA_FDT_INT;
+    }
+  }
+  if (!dma_irq_enabled && ((DMA1->sts & DMA1_FDT1_FLAG) != 0u)) {
+    DMA1->clr = DMA1_FDT1_FLAG;
+    analog_copy_raw_sweep();
+  }
+}
+#endif
 
 //--------------------------------------------------------------------+
 // Interrupt Handlers
@@ -240,9 +275,9 @@ __attribute__((section(".ramfunc"))) void DMA1_Channel1_IRQHandler(void) {
   static uint8_t current_mux_channel = 0;
 #endif
 
-  if (dma_interrupt_flag_get(DMA1_FDT1_FLAG) == SET) {
+  if ((DMA1->sts & DMA1_FDT1_FLAG) != 0u) {
     // Clear the DMA transfer complete flag
-    dma_flag_clear(DMA1_FDT1_FLAG);
+    DMA1->clr = DMA1_FDT1_FLAG;
 
 #if ADC_NUM_MUX_INPUTS > 0
     for (uint32_t i = 0; i < ADC_NUM_MUX_INPUTS; i++) {
@@ -250,7 +285,6 @@ __attribute__((section(".ramfunc"))) void DMA1_Channel1_IRQHandler(void) {
       if (key)
         adc_values[key - 1] = adc_buffer[i];
     }
-#endif
 
 #if ADC_NUM_RAW_INPUTS > 0
     for (uint32_t i = 0; i < ADC_NUM_RAW_INPUTS; i++) {
@@ -260,7 +294,6 @@ __attribute__((section(".ramfunc"))) void DMA1_Channel1_IRQHandler(void) {
     }
 #endif
 
-#if ADC_NUM_MUX_INPUTS > 0
     current_mux_channel =
         (current_mux_channel + 1) & ((1 << ADC_NUM_MUX_SELECT_PINS) - 1);
     // We initialize all the ADC values when we have gone through all the
@@ -277,10 +310,8 @@ __attribute__((section(".ramfunc"))) void DMA1_Channel1_IRQHandler(void) {
 
     // Delay to allow the multiplexer outputs to settle
     tmr_counter_enable(TMR6, TRUE);
-#else
-    // In continuous repeat_mode, conversions loop automatically in hardware
-    adc_initialized = true;
-    analog_sweep_count++;
+#elif ADC_NUM_RAW_INPUTS > 0
+    analog_copy_raw_sweep();
 #endif
   }
 }

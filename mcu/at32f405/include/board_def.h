@@ -17,6 +17,7 @@
 
 #define FAST_INLINE_TIMER 1
 #define FAST_INLINE_CYCLE_COUNT 1
+#define ANALOG_POLLING_TASK 1
 
 //--------------------------------------------------------------------+
 // ADC Configuration

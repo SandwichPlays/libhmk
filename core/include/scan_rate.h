@@ -16,6 +16,7 @@
 #pragma once
 
 #include "common.h"
+#include "hardware/timer_api.h"
 
 //--------------------------------------------------------------------+
 // Scan Rate & Latency Measurement
@@ -64,10 +65,14 @@ void scan_rate_task(void);
  */
 void scan_rate_get(scan_rate_t *out);
 
+extern volatile uint32_t scan_rate_active_until_ms;
+
 /**
  * @brief Check if scan rate / latency benchmark telemetry is actively polled
  */
-bool scan_rate_is_active(void);
+__attribute__((always_inline)) static inline bool scan_rate_is_active(void) {
+  return timer_read() < scan_rate_active_until_ms;
+}
 
 /**
  * @brief Get the current ADC sweep period in microseconds

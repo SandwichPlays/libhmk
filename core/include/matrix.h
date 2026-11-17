@@ -48,6 +48,15 @@
 #define MATRIX_CALIBRATION_EPSILON 5
 #endif
 
+#if !defined(MATRIX_CALIBRATION_MIN_SPAN)
+// Minimum valid ADC travel span between rest and bottom-out
+#if defined(ADC_RESOLUTION) && ADC_RESOLUTION > 12
+#define MATRIX_CALIBRATION_MIN_SPAN (150u << (ADC_RESOLUTION - 12))
+#else
+#define MATRIX_CALIBRATION_MIN_SPAN 150u
+#endif
+#endif
+
 #if !defined(MATRIX_DEBOUNCE_MS)
 // Lockout debounce duration in milliseconds to prevent double-clicking/chatter
 #define MATRIX_DEBOUNCE_MS 2
@@ -207,6 +216,14 @@ bool matrix_is_analog_key(uint8_t key);
  * @return true if inverted, false otherwise
  */
 bool matrix_is_key_inverted(uint8_t key);
+
+/**
+ * @brief Check if an analog key's calibration range is sane (not stuck at rails or below min span)
+ *
+ * @param key Key index
+ * @return true if valid, false otherwise
+ */
+bool matrix_is_key_calibration_valid(uint8_t key);
 
 /**
  * @brief Get the unfiltered raw ADC reading of a key

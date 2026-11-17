@@ -79,7 +79,8 @@ __attribute__((always_inline)) static inline void layout_layer_lock(void) {
  *
  * @return Keycode
  */
-static uint8_t layout_get_keycode(uint8_t current_layer, uint8_t key) {
+__attribute__((section(".ramfunc"))) static uint8_t
+layout_get_keycode(uint8_t current_layer, uint8_t key) {
   // Find the first active layer with a non-transparent keycode
   for (uint32_t i = (uint32_t)current_layer + 1; i-- > 0;) {
     if (((layer_mask >> i) & 1) == 0)
@@ -255,7 +256,9 @@ __attribute__((section(".ramfunc"))) void layout_task(void) {
   }
 
   // Process deferred actions for the next matrix scan
-  deferred_action_process();
+  if (deferred_action_pending()) {
+    deferred_action_process();
+  }
   layout_task_user();
 }
 
@@ -282,7 +285,7 @@ bool layout_set_profile(uint8_t profile) {
   return status;
 }
 
-void layout_register(uint8_t key, uint8_t keycode) {
+__attribute__((section(".ramfunc"))) void layout_register(uint8_t key, uint8_t keycode) {
   if (keycode == KC_NO)
     return;
 
@@ -354,7 +357,7 @@ void layout_register(uint8_t key, uint8_t keycode) {
   }
 }
 
-void layout_unregister(uint8_t key, uint8_t keycode) {
+__attribute__((section(".ramfunc"))) void layout_unregister(uint8_t key, uint8_t keycode) {
   if (keycode == KC_NO)
     return;
 

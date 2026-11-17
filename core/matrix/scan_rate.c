@@ -43,10 +43,10 @@ static void scan_rate_reset_window(uint32_t now) {
   max_cycles = 0;
 }
 
-static uint32_t active_until_ms = 0;
+volatile uint32_t scan_rate_active_until_ms = 0;
 
 void scan_rate_init(void) {
-  active_until_ms = 0;
+  scan_rate_active_until_ms = 0;
   eval_rate_hz = 0;
   sweep_rate_hz = 0;
   sweep_period_us = 0;
@@ -57,7 +57,7 @@ void scan_rate_init(void) {
 }
 
 void scan_rate_task(void) {
-  if (timer_read() >= active_until_ms) {
+  if (timer_read() >= scan_rate_active_until_ms) {
     return;
   }
 
@@ -102,10 +102,10 @@ static volatile uint16_t latest_release_latency_us = 0;
 
 void scan_rate_get(scan_rate_t *out) {
   const uint32_t now = timer_read();
-  if (now >= active_until_ms) {
+  if (now >= scan_rate_active_until_ms) {
     scan_rate_reset_window(board_cycle_count());
   }
-  active_until_ms = now + 2000;
+  scan_rate_active_until_ms = now + 2000;
   out->sweep_rate_hz = sweep_rate_hz;
   out->eval_rate_hz = eval_rate_hz;
   out->sweep_period_us = sweep_period_us;
@@ -114,10 +114,6 @@ void scan_rate_get(scan_rate_t *out) {
   out->eval_avg_us = eval_avg_us;
   out->press_latency_us = latest_press_latency_us;
   out->release_latency_us = latest_release_latency_us;
-}
-
-bool scan_rate_is_active(void) {
-  return timer_read() < active_until_ms;
 }
 
 uint16_t scan_rate_get_sweep_period_us(void) {

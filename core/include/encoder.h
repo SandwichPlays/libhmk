@@ -19,6 +19,10 @@
 
 #if defined(ENCODER_ENABLE)
 
+#if !defined(ENCODER_HAS_POLLED)
+#define ENCODER_HAS_POLLED 1
+#endif
+
 /**
  * @brief Initialize the rotary encoder module
  *

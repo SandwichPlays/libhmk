@@ -45,6 +45,8 @@ static uint32_t digital_last_change[DIGITAL_KEY_COUNT];
 
 // Bitmap for tracking which keys have inverted polarity (North-facing magnet)
 static bitmap_t key_inverted[] = MAKE_BITMAP(NUM_KEYS);
+// Bitmap for tracking analog keys whose rest/bottom-out span fails sanity validation
+static bitmap_t key_calib_invalid[] = MAKE_BITMAP(NUM_KEYS);
 
 bool matrix_is_analog_key(uint8_t key) {
   if (key >= NUM_KEYS)
@@ -82,10 +84,26 @@ __attribute__((always_inline)) static inline uint16_t
 matrix_bottom_out_value(uint8_t key, uint16_t rest_value) {
   uint16_t threshold =
       eeconfig->bottom_out_threshold[key] & BOTTOM_OUT_THRESHOLD_MASK;
+  if (threshold > 0 && threshold < MATRIX_CALIBRATION_MIN_SPAN) {
+    threshold = 0;
+  }
   if (threshold == 0) {
     threshold = eeconfig->calibration.initial_bottom_out_threshold;
   }
   return M_MIN((uint32_t)rest_value + threshold, ADC_MAX_VALUE);
+}
+
+static inline bool matrix_validate_key_range(uint8_t key) {
+  const uint16_t rest = key_matrix[key].adc_rest_value;
+  const uint16_t bot = key_matrix[key].adc_bottom_out_value;
+  return (rest > 0u && rest < ADC_MAX_VALUE &&
+          bot >= (uint32_t)rest + MATRIX_CALIBRATION_MIN_SPAN);
+}
+
+bool matrix_is_key_calibration_valid(uint8_t key) {
+  if (!matrix_is_analog_key(key))
+    return true;
+  return !bitmap_get(key_calib_invalid, key);
 }
 
 key_state_t key_matrix[NUM_KEYS];
@@ -187,6 +205,7 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
   // 3. Track resting noise during calibration duration
   const uint32_t calibration_start = timer_read();
   while (timer_elapsed(calibration_start) < MATRIX_CALIBRATION_DURATION) {
+    board_watchdog_feed();
     analog_task();
 
     for (uint32_t idx = 0; idx < MATRIX_NUM_ANALOG_KEYS; idx++) {
@@ -202,13 +221,14 @@ void matrix_recalibrate(bool reset_bottom_out_threshold) {
     }
   }
 
-  // 4. Update bottom out values using the fresh rest values
+  // 4. Update bottom out values using the fresh rest values and validate range
   for (uint32_t idx = 0; idx < MATRIX_NUM_ANALOG_KEYS; idx++) {
     const uint32_t i = ANALOG_KEY_AT(idx);
     raw_boot_rest[i] = analog_read(i);
     base_cal_rest[i] = key_matrix[i].adc_rest_value;
     key_matrix[i].adc_bottom_out_value =
         matrix_bottom_out_value(i, key_matrix[i].adc_rest_value);
+    bitmap_set(key_calib_invalid, i, !matrix_validate_key_range((uint8_t)i));
   }
 
   // 5. Update cached switch travel
@@ -248,7 +268,8 @@ void matrix_finish_manual_calibration(bool save) {
       bottom_out_threshold[i] = eeconfig->bottom_out_threshold[i];
       if (manual_calib_status[i] == CALIB_STATE_COMPLETED ||
           manual_calib_status[i] == CALIB_STATE_RECORDING) {
-        if (manual_calib_peak[i] > key_matrix[i].adc_rest_value + 50) {
+        if (manual_calib_peak[i] >=
+            (uint32_t)key_matrix[i].adc_rest_value + MATRIX_CALIBRATION_MIN_SPAN) {
           uint16_t delta = manual_calib_peak[i] - key_matrix[i].adc_rest_value;
           if (bitmap_get(key_inverted, i)) {
             delta |= BOTTOM_OUT_POLARITY_INVERTED;
@@ -258,6 +279,12 @@ void matrix_finish_manual_calibration(bool save) {
       }
     }
     EECONFIG_WRITE(bottom_out_threshold, bottom_out_threshold);
+  }
+  for (uint32_t idx = 0; idx < MATRIX_NUM_ANALOG_KEYS; idx++) {
+    const uint32_t i = ANALOG_KEY_AT(idx);
+    key_matrix[i].adc_bottom_out_value =
+        matrix_bottom_out_value((uint8_t)i, key_matrix[i].adc_rest_value);
+    bitmap_set(key_calib_invalid, i, !matrix_validate_key_range((uint8_t)i));
   }
   manual_calib_active = false;
   for (uint32_t i = 0; i < NUM_KEYS; i++) {
@@ -466,6 +493,10 @@ __attribute__((section(".ramfunc"))) void matrix_scan(void) {
       if (new_adc_filtered != prev_filtered ||
           key_matrix[i].adc_rest_value != prev_rest ||
           key_matrix[i].adc_bottom_out_value != prev_bot) {
+        if (key_matrix[i].adc_rest_value != prev_rest ||
+            key_matrix[i].adc_bottom_out_value != prev_bot) {
+          bitmap_set(key_calib_invalid, i, !matrix_validate_key_range((uint8_t)i));
+        }
         dist = adc_to_distance(new_adc_filtered,
                                key_matrix[i].adc_rest_value,
                                key_matrix[i].adc_bottom_out_value,
@@ -538,7 +569,11 @@ __attribute__((section(".ramfunc"))) void matrix_scan(void) {
 
     bool next_pressed = key_matrix[i].is_pressed;
 
-    if (bitmap_get(rapid_trigger_disabled, i) || (rt_down == 0)) {
+    if (bitmap_get(key_calib_invalid, i)) {
+      key_matrix[i].key_dir = KEY_DIR_INACTIVE;
+      key_matrix[i].extremum = 0;
+      next_pressed = false;
+    } else if (bitmap_get(rapid_trigger_disabled, i) || (rt_down == 0)) {
       // Classic static actuation mode
       key_matrix[i].key_dir = KEY_DIR_INACTIVE;
       if (key_matrix[i].is_pressed) {
