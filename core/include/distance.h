@@ -199,13 +199,21 @@ extern uint16_t distance_lut[DISTANCE_LUT_SIZE];
 void distance_lut_init(void);
 
 #if !defined(DISTANCE_REST_LENIENCE)
-// Distance units in micrometers (0.001mm) at top to guard against resting magnetic jitter (~0.050mm)
+// Distance units in micrometers (0.001mm) at top to guard against resting magnetic jitter
+#if defined(ADC_RESOLUTION) && ADC_RESOLUTION > 12
+#define DISTANCE_REST_LENIENCE 10u
+#else
 #define DISTANCE_REST_LENIENCE 50u
+#endif
 #endif
 
 #if !defined(DISTANCE_BOTTOM_LENIENCE)
-// Distance units in micrometers (0.001mm) at bottom to guarantee clean bottom-out (~0.030mm)
+// Distance units in micrometers (0.001mm) at bottom to guarantee clean bottom-out
+#if defined(ADC_RESOLUTION) && ADC_RESOLUTION > 12
+#define DISTANCE_BOTTOM_LENIENCE 10u
+#else
 #define DISTANCE_BOTTOM_LENIENCE 30u
+#endif
 #endif
 
 /**

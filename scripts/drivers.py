@@ -104,6 +104,7 @@ class ADC:
     oversample_map: dict[int, tuple[str, str] | None] = field(
         default_factory=lambda: {1: None}
     )
+    oversample_shift_map: dict[int, str] = field(default_factory=dict)
     sample_cycles_map: dict[float, str] = field(default_factory=dict)
 
     def to_adc_inputs(self, channels_or_pins: list[str | int]):
@@ -214,6 +215,18 @@ _AT32F405_OVERSAMPLE_MAP: dict[int, tuple[str, str] | None] = {
     64: ("ADC_OVERSAMPLE_RATIO_64", "ADC_OVERSAMPLE_SHIFT_6"),
     128: ("ADC_OVERSAMPLE_RATIO_128", "ADC_OVERSAMPLE_SHIFT_7"),
     256: ("ADC_OVERSAMPLE_RATIO_256", "ADC_OVERSAMPLE_SHIFT_8"),
+}
+
+_AT32F405_OVERSAMPLE_SHIFT_MAP: dict[int, str] = {
+    0: "ADC_OVERSAMPLE_SHIFT_0",
+    1: "ADC_OVERSAMPLE_SHIFT_1",
+    2: "ADC_OVERSAMPLE_SHIFT_2",
+    3: "ADC_OVERSAMPLE_SHIFT_3",
+    4: "ADC_OVERSAMPLE_SHIFT_4",
+    5: "ADC_OVERSAMPLE_SHIFT_5",
+    6: "ADC_OVERSAMPLE_SHIFT_6",
+    7: "ADC_OVERSAMPLE_SHIFT_7",
+    8: "ADC_OVERSAMPLE_SHIFT_8",
 }
 
 _AT32F405_SAMPLE_CYCLES_MAP: dict[float, str] = {
@@ -387,6 +400,7 @@ AT32F405XX = Driver(
                 [f"GPIO_PINS_{pin[1:]}" for pin in pins],
             ),
             oversample_map=_AT32F405_OVERSAMPLE_MAP,
+            oversample_shift_map=_AT32F405_OVERSAMPLE_SHIFT_MAP,
             sample_cycles_map=_AT32F405_SAMPLE_CYCLES_MAP,
         ),
         valid_ports=["A", "B", "C", "D", "F"],
@@ -429,6 +443,7 @@ AT32F405XB = Driver(
                 [f"GPIO_PINS_{pin[1:]}" for pin in pins],
             ),
             oversample_map=_AT32F405_OVERSAMPLE_MAP,
+            oversample_shift_map=_AT32F405_OVERSAMPLE_SHIFT_MAP,
             sample_cycles_map=_AT32F405_SAMPLE_CYCLES_MAP,
         ),
         valid_ports=["A", "B", "C", "D", "F"],

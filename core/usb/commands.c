@@ -222,6 +222,9 @@ void command_process(const uint8_t *buf) {
       } else {
         uint16_t delta =
             key_matrix[i].adc_bottom_out_value - key_matrix[i].adc_rest_value;
+        if (delta > BOTTOM_OUT_THRESHOLD_MASK) {
+          delta = BOTTOM_OUT_THRESHOLD_MASK;
+        }
         if (matrix_is_key_inverted(i)) {
           delta |= BOTTOM_OUT_POLARITY_INVERTED;
         }

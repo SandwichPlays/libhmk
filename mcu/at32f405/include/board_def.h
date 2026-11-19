@@ -40,7 +40,7 @@
 #endif
 #endif
 
-// ADC resolution in bits, set by `scripts/make.py`
-#if ADC_RESOLUTION != 12
+// ADC resolution in bits, set by `scripts/make.py` (12-bit native, up to 16-bit unshifted oversampled)
+#if ADC_RESOLUTION < 12 || ADC_RESOLUTION > 16
 #error "Unsupported ADC resolution"
 #endif

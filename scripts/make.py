@@ -101,8 +101,10 @@ build_flags.define("USB_PRODUCT_ID", kb_json.usb.pid)
 build_flags.define("DEFAULT_DISTANCE_LUT", utils.to_c_array(sw_json.lut))
 
 # Hall / Analog Configuration
+adc_resolution = utils.get_adc_resolution(kb_json, driver)
+adc_extra_bits = max(0, adc_resolution - driver.metadata.adc.max_resolution)
 build_flags.define("ADC_NUM_CHANNELS", len(driver.metadata.adc.input_pins))
-build_flags.define("ADC_RESOLUTION", utils.get_adc_resolution(kb_json, driver))
+build_flags.define("ADC_RESOLUTION", adc_resolution)
 
 if kb_json.hall.invert_adc:
     build_flags.define("MATRIX_INVERT_ADC_VALUES")
@@ -115,8 +117,14 @@ if kb_json.hall.oversample is not None:
     if os_pair is None:
         build_flags.define("ADC_OVERSAMPLE_DISABLE")
     else:
-        build_flags.define("ADC_OVERSAMPLE_RATIO", os_pair[0])
-        build_flags.define("ADC_OVERSAMPLE_SHIFT", os_pair[1])
+        ratio_macro, shift_macro = os_pair
+        if adc_extra_bits > 0 and driver.metadata.adc.oversample_shift_map:
+            os_bits = kb_json.hall.oversample.bit_length() - 1
+            shift_macro = driver.metadata.adc.oversample_shift_map[
+                max(0, os_bits - adc_extra_bits)
+            ]
+        build_flags.define("ADC_OVERSAMPLE_RATIO", ratio_macro)
+        build_flags.define("ADC_OVERSAMPLE_SHIFT", shift_macro)
 
 if kb_json.hall.sample_cycles is not None:
     sc_macro = driver.metadata.adc.sample_cycles_map[kb_json.hall.sample_cycles]
@@ -209,7 +217,7 @@ travel_val = int(round(switch_travel_mm * 10))
 bottom_out_threshold = (
     kb_json.hall.bottom_out_threshold
     if kb_json.hall.bottom_out_threshold is not None
-    else sw_json.initial_bottom_out_threshold
+    else (sw_json.initial_bottom_out_threshold << max(0, adc_resolution - 12))
 )
 assert kb_json.num_keys is not None
 cal_dict = {

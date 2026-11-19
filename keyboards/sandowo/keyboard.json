@@ -13,8 +13,9 @@
   "hall": {
     "pins": ["B1", "C5", "A6", "A4"],
     "sample_cycles": 13.5,
-    "oversample": 4,
-    "rest_adc": 2400
+    "oversample": 16,
+    "adc_resolution": 16,
+    "rest_adc": 38400
   },
   "encoders": [
     {

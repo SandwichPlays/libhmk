@@ -12,7 +12,10 @@
   "switch": "yingying_dual_lights_max",
   "hall": {
     "pins": ["C5", "A6", "A4"],
-    "rest_adc": 2400
+    "sample_cycles": 13.5,
+    "oversample": 16,
+    "adc_resolution": 16,
+    "rest_adc": 38400
   },
   "encoders": [
     {

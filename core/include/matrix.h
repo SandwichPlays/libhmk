@@ -42,19 +42,34 @@
 #define MATRIX_EMA_STEP_BYPASS_THRESHOLD 30
 #endif
 
+#if defined(ADC_RESOLUTION) && ADC_RESOLUTION > 12
+#define ADC_RES_SHIFT (ADC_RESOLUTION - 12)
+#else
+#define ADC_RES_SHIFT 0
+#endif
+
+// Scale a 16-bit ADC-domain constant down to the board's active ADC_RESOLUTION (ceiling >= 1)
+#if defined(ADC_RESOLUTION) && ADC_RESOLUTION < 16
+#define ADC_FROM_16BIT(val16)                                                  \
+  ((uint16_t)(((uint32_t)(val16) + (1u << (16 - ADC_RESOLUTION)) - 1u) >>      \
+              (16 - ADC_RESOLUTION)))
+#else
+#define ADC_FROM_16BIT(val16) ((uint16_t)(val16))
+#endif
+
 #if !defined(MATRIX_CALIBRATION_EPSILON)
-// Minimum change in ADC values required to update the calibration values. This
-// is used to mitigate the inconsistency of the Hall effect sensors.
-#define MATRIX_CALIBRATION_EPSILON 5
+// Minimum change in ADC values required to update the calibration values.
+#define MATRIX_CALIBRATION_EPSILON (5u << ADC_RES_SHIFT)
 #endif
 
 #if !defined(MATRIX_CALIBRATION_MIN_SPAN)
 // Minimum valid ADC travel span between rest and bottom-out
-#if defined(ADC_RESOLUTION) && ADC_RESOLUTION > 12
-#define MATRIX_CALIBRATION_MIN_SPAN (150u << (ADC_RESOLUTION - 12))
-#else
-#define MATRIX_CALIBRATION_MIN_SPAN 150u
+#define MATRIX_CALIBRATION_MIN_SPAN (150u << ADC_RES_SHIFT)
 #endif
+
+#if !defined(MATRIX_DEFAULT_BOTTOM_OUT_SPAN)
+// Fallback travel span when saved eeconfig threshold is stale/below min span (600 @ 12-bit, 9600 @ 16-bit)
+#define MATRIX_DEFAULT_BOTTOM_OUT_SPAN (600u << ADC_RES_SHIFT)
 #endif
 
 #if !defined(MATRIX_DEBOUNCE_MS)
@@ -62,29 +77,78 @@
 #define MATRIX_DEBOUNCE_MS 2
 #endif
 
-#if !defined(HALL_NOISE_GATE_ADC_UNITS)
-// Noise gate window in ADC counts for resting baseline drift tracking
-#define HALL_NOISE_GATE_ADC_UNITS 20
+// AE64 Pro directional slew-limited 2-stage IIR filter thresholds
+#if !defined(MATRIX_ADC_STEP_LIMIT_LARGE)
+#define MATRIX_ADC_STEP_LIMIT_LARGE ADC_FROM_16BIT(240u)
+#endif
+
+#if !defined(MATRIX_ADC_STEP_LIMIT_SMALL)
+#define MATRIX_ADC_STEP_LIMIT_SMALL ADC_FROM_16BIT(60u)
+#endif
+
+#if !defined(MATRIX_ADC_SLEW_TIGHT_DEPTH)
+#define MATRIX_ADC_SLEW_TIGHT_DEPTH ADC_FROM_16BIT(200u)
+#endif
+
+// AE64 Pro low-travel smoothing & baseline drift parameters
+#if !defined(MATRIX_LOW_TRAVEL_SMOOTH_UM)
+#define MATRIX_LOW_TRAVEL_SMOOTH_UM 100u
+#endif
+
+#if !defined(MATRIX_REST_WARMUP_MS)
+// First 10 seconds after boot/recal use 5ms drift cadence, then 1000ms
+#define MATRIX_REST_WARMUP_MS 10000u
+#endif
+
+#if !defined(MATRIX_REST_WARMUP_TICK_MS)
+#define MATRIX_REST_WARMUP_TICK_MS 5u
+#endif
+
+#if !defined(MATRIX_REST_STEADY_TICK_MS)
+#define MATRIX_REST_STEADY_TICK_MS 1000u
+#endif
+
+#if !defined(MATRIX_DRIFT_INHIBIT_SWEEPS)
+#define MATRIX_DRIFT_INHIBIT_SWEEPS 100u
+#endif
+
+#if !defined(MATRIX_DRIFT_EMERGENCY_DELTA)
+#define MATRIX_DRIFT_EMERGENCY_DELTA ADC_FROM_16BIT(1000u)
 #endif
 
 #if !defined(HALL_MAX_REST_UPWARD_DRIFT)
-// Maximum upward thermal drift allowed above calibrated baseline
-#define HALL_MAX_REST_UPWARD_DRIFT 25
+// Maximum toward-press thermal drift allowed above calibrated baseline
+#define HALL_MAX_REST_UPWARD_DRIFT (25u << ADC_RES_SHIFT)
 #endif
 
-#if !defined(MATRIX_BASELINE_DOWN_TIME_MS)
-// Fast auto-baseline recovery duration for small downward shifts (20ms)
-#define MATRIX_BASELINE_DOWN_TIME_MS 20
+// AE64 Pro Rapid Trigger dual-domain ADC tracker & rebound guard parameters
+#if !defined(MATRIX_RT_ADC_SNAP_DELTA)
+#define MATRIX_RT_ADC_SNAP_DELTA ADC_FROM_16BIT(30u)
 #endif
 
-#if !defined(MATRIX_REST_UPWARD_IDLE_TIME_MS)
-// Idle duration in milliseconds of zero motion before allowing 1 ADC count upward drift
-#define MATRIX_REST_UPWARD_IDLE_TIME_MS 3000
+#if !defined(MATRIX_RT_ADC_SNAP_MARGIN)
+#define MATRIX_RT_ADC_SNAP_MARGIN ADC_FROM_16BIT(7u)
+#endif
+
+#if !defined(MATRIX_RT_ADC_NOISE_GUARD_NORMAL)
+#define MATRIX_RT_ADC_NOISE_GUARD_NORMAL ADC_FROM_16BIT(7u)
+#endif
+
+#if !defined(MATRIX_RT_ADC_NOISE_GUARD_TOP)
+#define MATRIX_RT_ADC_NOISE_GUARD_TOP ADC_FROM_16BIT(12u)
+#endif
+
+#if !defined(MATRIX_RT_DRIFT_TICK_MS)
+#define MATRIX_RT_DRIFT_TICK_MS 1000u
 #endif
 
 #if !defined(MATRIX_HYST_GAP)
-// Default hysteresis gap in micrometers (0.020mm = 20 µm)
-#define MATRIX_HYST_GAP 20
+// Default static hysteresis gap in micrometers (10 µm @ >12-bit like AE64 Pro, 20 µm @ 12-bit)
+#if defined(ADC_RESOLUTION) && ADC_RESOLUTION > 12
+#define MATRIX_HYST_GAP 10u
+#else
+#define MATRIX_HYST_GAP 20u
+#endif
 #endif
 
 #if defined(ANALOG_KEY_COUNT)

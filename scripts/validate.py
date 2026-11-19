@@ -47,6 +47,21 @@ def validate_keyboard(keyboard: str):
                 f"[{keyboard}] Unsupported hall.sample_cycles={kb_json.hall.sample_cycles} for MCU '{kb_json.mcu}'. "
                 f"Supported: {list(driver.metadata.adc.sample_cycles_map.keys())}"
             )
+    if kb_json.hall.adc_resolution is not None:
+        req_res = kb_json.hall.adc_resolution
+        native_res = driver.metadata.adc.max_resolution
+        if req_res > 16 or req_res < native_res:
+            raise ValueError(
+                f"[{keyboard}] hall.adc_resolution={req_res} must be in [{native_res}, 16] for MCU '{kb_json.mcu}'"
+            )
+        if req_res > native_res:
+            os_ratio = kb_json.hall.oversample or 1
+            os_bits = os_ratio.bit_length() - 1
+            if not driver.metadata.adc.oversample_shift_map or (req_res - native_res) > os_bits:
+                raise ValueError(
+                    f"[{keyboard}] hall.adc_resolution={req_res} requires hall.oversample >= {1 << (req_res - native_res)} "
+                    f"(got {os_ratio}) on MCU '{kb_json.mcu}'"
+                )
 
     # 3. Validate GPIO pins & duplicate pin usage across subsystems
     used_pins: dict[str, str] = {}
